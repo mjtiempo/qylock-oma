@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "mark.lock-themes",
   "name": "Lock & SDDM Theme Manager",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "author": "Mark",
   "license": "MIT",
   "description": "Downloads lock screen and SDDM themes from a compatible git repository (qylock-style: themes/<name>/ dirs + optional quickshell-lockscreen/ app), lists them in a menu, and applies your pick: SDDM login theme, the repo lock screen theme, and the Omarchy lock background.",
