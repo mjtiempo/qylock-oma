@@ -86,11 +86,11 @@ Item {
   property int padding: Style.spacing.panelPadding
   property int gap: Style.spacing.md
   readonly property int columns: 4
-  property int cardWidth: Math.min(Style.space(870), panel.width - Style.gapsOut * 2)
+  property int cardWidth: Math.min(Style.space(808), panel.width - Style.gapsOut * 2)
   // Centered card sized to its content: three full theme rows, symmetric
   // margins (content anchors center, so no bottom-heavy black area).
-  readonly property int headerBlock: Style.space(205)
-  readonly property int footerBlock: Style.space(48)
+  readonly property int headerBlock: Style.space(220)
+  readonly property int footerBlock: Style.space(52)
   readonly property int tileGap: Style.space(14)
   readonly property int rowsVisible: 3
   property int gridHeight: root.rowsVisible * (root.tileHeight + root.tileGap)
@@ -100,7 +100,7 @@ Item {
   // Exact fit: columns*tileGap so the four cells (incl. their right/side
   // gaps) never exceed the available width -> the 4th column is never clipped.
   property int tileWidth: Math.floor((cardWidth - root.padding * 2 - root.columns * root.tileGap) / root.columns)
-  property int tileHeight: tileWidth + Style.space(56)
+  property int tileHeight: tileWidth + Style.space(60)
 
   // ---------------------------------------------------------------- actions
   function shq(s) {
@@ -267,41 +267,14 @@ Item {
         spacing: root.gap
 
         // ------------------------------------------------------------ header
-        Row {
+        Text {
           width: parent.width
-          spacing: Style.space(8)
-
-          Text {
-            text: "Lock & SDDM Themes"
-            color: root.foreground
-            font.family: Style.font.family
-            font.pixelSize: Style.font.title
-            font.bold: true
-            elide: Text.ElideRight
-            width: parent.width - statusPill.width - parent.spacing
-          }
-
-          Rectangle {
-            id: statusPill
-            width: pillText.implicitWidth + Style.space(16)
-            height: pillText.implicitHeight + Style.space(8)
-            radius: height / 2
-            color: root.busy ? root.accent
-                 : root.phase === "error" ? Color.urgent
-                 : root.phase === "idle" ? Style.selectionFillFor(root.foreground, root.accent)
-                 : root.accent
-            anchors.verticalCenter: parent.verticalCenter
-
-            Text {
-              id: pillText
-              anchors.centerIn: parent
-              text: root.busy ? "working…" : root.phase
-              color: root.foreground
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              font.bold: true
-            }
-          }
+          text: "QyLock Oma - SDDM and Lock themes"
+          color: root.foreground
+          font.family: Style.font.family
+          font.pixelSize: Style.font.title + 4
+          font.bold: true
+          elide: Text.ElideRight
         }
 
         Text {
@@ -309,7 +282,7 @@ Item {
           text: root.message
           color: root.phase === "error" ? Color.urgent : root.muted
           font.family: Style.font.family
-          font.pixelSize: Style.font.caption
+          font.pixelSize: Style.font.body
           wrapMode: Text.WordWrap
         }
 
@@ -323,7 +296,7 @@ Item {
             : "No themes available yet."
           color: root.muted
           font.family: Style.font.family
-          font.pixelSize: Style.font.caption
+          font.pixelSize: Style.font.body
           elide: Text.ElideRight
         }
 
@@ -432,7 +405,7 @@ Item {
                 text: modelData.name
                 color: root.foreground
                 font.family: Style.font.family
-                font.pixelSize: Style.font.body
+                font.pixelSize: Style.font.subtitle
                 font.bold: true
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
@@ -452,7 +425,7 @@ Item {
                 }
                 color: root.isCurrent(modelData.name) ? root.accent : root.muted
                 font.family: Style.font.family
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.bodySmall
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
               }
@@ -469,7 +442,7 @@ Item {
             + "Escape closes."
           color: root.muted
           font.family: Style.font.family
-          font.pixelSize: Style.font.caption
+          font.pixelSize: Style.font.bodySmall
           wrapMode: Text.WordWrap
         }
       }
