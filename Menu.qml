@@ -276,7 +276,11 @@ Item {
         Text {
           width: parent.width
           visible: root.busy || root.phase === "error" || root.themeCount === 0
-          text: root.themeCount === 0 ? "No themes available yet." : root.message
+          // Show the service's error message whenever there is one — the
+          // empty-state text must never hide a failing sync.
+          text: root.phase === "error" ? root.message
+              : root.themeCount === 0 ? "No themes available yet. Sync is running…"
+              : root.message
           color: root.phase === "error" ? Color.urgent : root.accent
           font.family: Style.font.family
           font.pixelSize: Style.font.body
