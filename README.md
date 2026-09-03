@@ -80,11 +80,15 @@ omarchy restart shell
 
 That's all. On first load the plugin:
 
-1. **Downloads the theme repo** (qylock) into
-   `~/.local/share/omarchy/mark.lock-themes/repo` — the first download is
-   **~1.6 GB** (theme images/videos), so the first shell start takes a few
-   minutes. Later starts are quick pulls.
+1. **Synchronises the theme catalog** (list + previews, ~3 MB) and prepares a
+   light asset cache (lock app + safe fallback theme) — total footprint
+   **~10 MB**. The heavy theme media is fetched later, per theme, only when
+   you Apply or Preview it (first use of a theme needs network and takes a
+   moment; afterwards it's instant).
 2. **Registers launcher entries** (see below) — no manual config.
+
+If a theme's assets aren't fetched yet, Preview/Apply fetch them on demand —
+you can also prefetch with `omarchy-shell mark.lock-themes fetchTheme <name>`.
 
 Validate the folder at any time:
 
@@ -150,6 +154,7 @@ omarchy-shell mark.lock-themes themes              # JSON theme list
 omarchy-shell mark.lock-themes applyBoth material-you   # lock + SDDM
 omarchy-shell mark.lock-themes previewLock clockwork-orbital  # lock now
 omarchy-shell mark.lock-themes applyBackground forest      # background only
+omarchy-shell mark.lock-themes fetchTheme nier-automata     # prefetch assets
 ```
 
 ## Lock behavior
