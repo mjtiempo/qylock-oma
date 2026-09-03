@@ -1,23 +1,23 @@
-# Lock & SDDM Theme Manager
+# QyLock Oma — SDDM and Lock themes
 
 An [Omarchy](https://omarchy.org/) shell plugin that downloads **lock screen and
-SDDM themes** from a compatible git repository, lists them in a menu, and lets
-you apply your pick:
+SDDM themes** from the [qylock](https://github.com/Darkkal44/qylock) repository,
+shows them in a square theme grid, and applies your pick:
 
-- **SDDM** — installs the theme to `/usr/share/sddm/themes/<name>` and sets
-  `Current=<name>` in `/etc/sddm.conf.d/theme.conf` (Polkit password prompt,
+- **Apply (Lock & SDDM tab)** — one action sets the theme for both the
+  Quickshell lock screen (`~/.config/qylock/theme` + the repo's lock app at
+  `~/.local/share/omarchy/mark.lock-themes/lockscreen/`) *and* the SDDM login
+  screen (installs to `/usr/share/sddm/themes/<name>`, sets
+  `Current=<name>` in `/etc/sddm.conf.d/theme.conf` — one Polkit prompt,
   takes effect at the next login screen).
-- **Lock** — installs the repository's Quickshell lock app
-  (`quickshell-lockscreen/`, qylock-style) to
-  `~/.local/share/omarchy/mark.lock-themes/lockscreen/` and writes the chosen
-  theme to `~/.config/qylock/theme`. In **Themed** lock mode, locking with the
-  keybinding, idle timer or suspend shows the repo lock with the selected
-  theme (see "Lock screen provider" below).
-- **BG** — applies the theme's background artwork to the Omarchy lock screen
-  and wallpaper (`omarchy theme bg set`).
+- **Apply (Background tab)** — sets the theme's artwork as the Omarchy
+  background (lock screen + wallpaper).
+- **Preview** — locks right now with a card's theme without changing your
+  selection.
 
 Works out of the box with [qylock](https://github.com/Darkkal44/qylock)
-(38 themes) and any other repository that follows the same layout:
+(40 themes incl. the clockwork family) and any other repository that follows
+the same layout:
 
 ```
 <repo>/
@@ -52,9 +52,7 @@ themes.
 The `clockwork-orbital` and `clockwork-neo-orbital` themes (bundled in
 qylock's `themes/clockwork/` collection) follow the **orbital** lock style
 from [dumidulkdev/omarchy-orbital-lock](https://github.com/dumidulkdev/omarchy-orbital-lock)
-— the Omarchy orbital lock-screen extension plugin by **Dumidul**, which this
-project coexists with (its installed copy, `dumidu.orbital-lock`, can be
-re-enabled by switching Lock screen back to Native).
+— the Omarchy orbital lock-screen extension plugin by **Dumidul**.
 
 ### Third-party license
 
@@ -65,34 +63,28 @@ on the user's machine. If you redistribute this plugin together with
 downloaded theme content, the combined distribution is governed by the
 themes' GPLv3 terms.
 
-## Install
+## Install (from git)
+
+Requires `git` (present on Omarchy by default; `omarchy pkg add git` if not):
 
 ```sh
-# 1. copy the plugin folder
-cp -r mark.lock-themes ~/.config/omarchy/plugins/mark.lock-themes
+# 1. add the plugin from GitHub
+omarchy plugin add https://github.com/mjtiempo/qylock-oma.git --enable --yes
 
-# 2. enable it in shell.json (plugins array)
-#    { "id": "mark.lock-themes" }
+#    — or via SSH (mjtiempo key):
+#    omarchy plugin add git@github.com:mjtiempo/qylock-oma.git --enable --yes
 
-# 3. restart the shell — it clones qylock automatically on start
+# 2. restart the shell to load it
 omarchy restart shell
 ```
 
-## Launcher entries (automatic)
+That's all. On first load the plugin:
 
-On first load the plugin registers itself, so neither this machine nor users
-installing it need to do anything manual:
-
-- **Omarchy menu row** — a `QyLock Oma` entry (searchable: `qylock`, `lock`,
-  `sddm`, `theme`) is added to
-  `~/.config/omarchy/extensions/omarchy-menu.jsonc` (only if the key is
-  missing; your existing entries are untouched). It summons the picker.
-- **Desktop entry** — `~/.local/share/applications/qylock-oma.desktop` makes
-  it appear in the launcher/Apps search, with the plugin's `preview.png` as
-  its icon.
-
-Both are written at user level, idempotently, at every shell start. Disable
-with `"autoEntries": false` in the plugin's `shell.json` entry.
+1. **Downloads the theme repo** (qylock) into
+   `~/.local/share/omarchy/mark.lock-themes/repo` — the first download is
+   **~1.6 GB** (theme images/videos), so the first shell start takes a few
+   minutes. Later starts are quick pulls.
+2. **Registers launcher entries** (see below) — no manual config.
 
 Validate the folder at any time:
 
@@ -103,9 +95,33 @@ qmllint -I "$OMARCHY_PATH/shell" \
   ~/.config/omarchy/plugins/mark.lock-themes/Menu.qml
 ```
 
+### Update
+
+```sh
+omarchy plugin update mark.lock-themes
+omarchy restart shell
+```
+
+## Launcher entries (automatic)
+
+On first load the plugin registers itself, so installing users need to do
+nothing manual:
+
+- **Omarchy menu row** — a `QyLock Oma` entry (searchable: `qylock`, `lock`,
+  `sddm`, `theme`) is added to
+  `~/.config/omarchy/extensions/omarchy-menu.jsonc` (only if the key is
+  missing; existing entries are untouched). It summons the picker.
+- **Desktop entry** — `~/.local/share/applications/qylock-oma.desktop` makes
+  it appear in the launcher/Apps search, with the plugin's `preview.png` as
+  its icon.
+
+Both are written at user level, idempotently, at every shell start. Disable
+with `"autoEntries": false` in the plugin's `shell.json` entry.
+
 ## Usage
 
-Open the theme menu (bind it, e.g. `SUPER+SHIFT+L`):
+Open the picker (`omarchy menu` → search **qylock**, or launch **QyLock Oma**
+from the app launcher; bind it, e.g. `SUPER+SHIFT+L`):
 
 ```sh
 omarchy-shell shell summon mark.lock-themes '{}'
@@ -121,8 +137,9 @@ The picker is a square theme grid with two tabs:
   Omarchy background (lock screen + wallpaper).
 
 The currently applied theme carries a small green **applied** badge (no
-highlight); the selected card is highlighted green with its action buttons.
-A scrollbar on the right scrolls the grid (`Escape` closes).
+selection highlight); the selected card is highlighted green with its action
+buttons. A scrollbar on the right scrolls the grid (drag or click);
+`Escape` closes.
 
 Everything can also be driven from the command line:
 
@@ -130,34 +147,27 @@ Everything can also be driven from the command line:
 omarchy-shell mark.lock-themes sync                # download/update themes
 omarchy-shell mark.lock-themes status              # JSON status
 omarchy-shell mark.lock-themes themes              # JSON theme list
-omarchy-shell mark.lock-themes installSddm nier-automata
-omarchy-shell mark.lock-themes setLockTheme material-you
-omarchy-shell mark.lock-themes applyBackground forest
+omarchy-shell mark.lock-themes applyBoth material-you   # lock + SDDM
+omarchy-shell mark.lock-themes previewLock clockwork-orbital  # lock now
+omarchy-shell mark.lock-themes applyBackground forest      # background only
 ```
 
-## Lock screen provider
+## Lock behavior
 
-The menu has a **Lock screen** switch:
+The picker's themes are rendered by the repository's Quickshell lock app,
+which answers the `lock` IPC target: locking (keybinding, idle timer,
+suspend — `omarchy system lock`) shows the selected theme's lock screen with
+the repo's design. The native Omarchy lock plugin is disabled while the
+plugin is active (password unlock only — no fingerprint).
 
-- **Native** (default) — the Omarchy in-shell lock stays in charge
-  (fingerprint + password, theme-aware). The plugin only manages themes.
-- **Themed** — the plugin answers the `lock` IPC target, the native lock
-  plugin is disabled, and locking (keybinding / idle / suspend) runs the
-  repository's Quickshell lock with the currently selected theme
-  (`~/.config/qylock/theme`). Password unlock only — no fingerprint.
-
-Switching is live and persists in
-`~/.local/state/omarchy/mark.lock-themes/config.json`; switch back to Native
-to restore the Omarchy lock. You can also lock immediately with the menu's
-**Test lock** button, or bind the installed app directly:
-
-```sh
-~/.local/share/omarchy/mark.lock-themes/lockscreen/lock.sh
-```
+To restore the native Omarchy lock, add `"lockMode": "native"` to the
+plugin's `shell.json` entry and re-enable the native plugin
+(`omarchy-shell shell setPluginEnabled dumidu.orbital-lock true`),
+then restart the shell.
 
 The installed lock app gets a small compatibility shim injected at install
-time (an inert `keyboard` object) so themes that use SDDM's keyboard context
-load cleanly.
+time (an inert `keyboard` object + `sddm.hostName`) so themes that use SDDM's
+keyboard context or gate login on `isQuickshell` behave correctly.
 
 ### Safety net (v1.2+)
 
@@ -165,8 +175,8 @@ A broken theme must never lock you out. The plugin guards the themed lock:
 
 - **theme-collection flattening** — `clockwork` is a folder of sub-themes
   (`orbital`, `neo-orbital`, `tape`), each a complete theme one level deeper
-  than the app expects. The scan now promotes them to flat, first-class
-  themes (`clockwork-orbital`, `clockwork-neo-orbital`, `clockwork-tape`) with
+  than the app expects. The scan promotes them to flat, first-class themes
+  (`clockwork-orbital`, `clockwork-neo-orbital`, `clockwork-tape`) with
   symlinks in the lock app's `themes_link/` so they lock and install like any
   other theme.
 - **known-broken badge** — themes known to hang the lock app (currently
@@ -175,12 +185,11 @@ A broken theme must never lock you out. The plugin guards the themed lock:
 - **watchdog** — kills the lock app only on a *confirmed* failure: the theme
   failing to load (`FAILED to load theme`, from the lock app's own loader) or
   the compositor probe repeatedly confirming the session never locked (a real
-  hang). It never kills a healthy lock on probe lag — that bug caused
-  healthy locks to die ~9 seconds after locking.
+  hang). It never kills a healthy lock on probe lag.
 - **safe fallback** — after a failure the lock relaunches once with a proven
-  stable theme (`girl-coffee`: bundled background + font, no videos).
- If the fallback also fails, the session is left
-  unlocked with an error message — never a black screen.
+  stable theme (`girl-coffee`: bundled background + font, no videos). If the
+  fallback also fails, the session is left unlocked with an error message —
+  never a black screen.
 - **no stranded locks** — after an abnormal exit the plugin probes the
   compositor lock state and re-locks with the safe theme if the session is
   still held, so you can always unlock with your password.
@@ -214,14 +223,14 @@ Optional `shell.json` plugin entry (defaults shown):
   "branch": "",
   "lockThemeFile": "~/.config/qylock/theme",
   "lockAppSubdir": "quickshell-lockscreen",
-  "autoSync": true
+  "autoSync": true,
+  "autoEntries": true
 }
 ```
 
 The repository URL/branch is configured through the `shell.json` plugin entry
 (or `~/.local/state/omarchy/mark.lock-themes/config.json`, which wins over
-`shell.json`). The menu no longer shows an Update UI — sync happens
-automatically on start and can be triggered with
+`shell.json`). Sync happens automatically on start and can be triggered with
 `omarchy-shell mark.lock-themes sync`. Extra themes can be dropped directly
 into `~/.local/share/omarchy/mark.lock-themes/repo/themes/<name>/` and are
 picked up by the next scan. State and downloaded themes live under:
