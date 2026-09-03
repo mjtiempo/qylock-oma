@@ -117,15 +117,6 @@ Item {
     root.writeFile(root.requestFile, req)
   }
 
-  function saveConfigThenSync() {
-    var url = String(urlField.text || "").trim()
-    var branch = String(branchField.text || "").trim()
-    if (url.length < 4) return
-    // config.json overrides the shell.json entry; the service watches it.
-    root.writeFile(root.configFile, JSON.stringify({ repo: url, branch: branch }))
-    Qt.callLater(function() { root.request("sync", "") })
-  }
-
   // Selected theme (click to select, click again to deselect)
   property string selected: ""
 
@@ -179,7 +170,6 @@ Item {
     if (typeof j.themedLockActive === "boolean") root.themedLockActive = j.themedLockActive
     if (j.lockAppDir) root.lockAppDir = String(j.lockAppDir)
     if (j.lockThemeFile) root.lockThemeFile = String(j.lockThemeFile)
-    if (j.repoUrl && String(urlField.text).length === 0) urlField.text = String(j.repoUrl)
   }
 
   function applyThemes(raw) {
@@ -323,69 +313,14 @@ Item {
           wrapMode: Text.WordWrap
         }
 
-        // ------------------------------------------------------------- repo
-        Row {
-          width: parent.width
-          spacing: Style.space(8)
-
-          Text {
-            id: repoLabel
-            text: "git repo"
-            color: root.muted
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            anchors.verticalCenter: parent.verticalCenter
-            width: Style.space(56)
-          }
-
-          TextField {
-            id: urlField
-            width: parent.width - repoLabel.width - branchLabel.width - updateButton.width - parent.spacing * 2
-            text: ""
-            placeholderText: "https://github.com/Darkkal44/qylock.git"
-            verticalPadding: Style.spacing.inputPaddingY
-            onEditingFinished: root.saveConfigThenSync()
-          }
-
-          Text {
-            id: branchLabel
-            text: "branch"
-            color: root.muted
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            anchors.verticalCenter: parent.verticalCenter
-            width: Style.space(40)
-          }
-
-          TextField {
-            id: branchField
-            width: Style.space(88)
-            text: ""
-            placeholderText: "default"
-            verticalPadding: Style.spacing.inputPaddingY
-            onEditingFinished: root.saveConfigThenSync()
-          }
-
-          Button {
-            id: updateButton
-            text: "Update"
-            accent: root.accent
-            enabled: !root.busy
-            onClicked: {
-              root.saveConfigThenSync()
-              root.refreshNow()
-            }
-          }
-        }
-
         Text {
           width: parent.width
           text: root.themeCount > 0
-            ? root.repoName + "  ·  " + (root.branchNow || "default") + " @" + root.commitNow + "  ·  " + root.themeCount + " themes   " +
+            ? root.themeCount + " themes   " +
               (root.currentSddm ? "· SDDM: " + root.currentSddm : "") + "   " +
               (root.currentLock ? "· lock: " + root.currentLock : "") + "   " +
               (root.currentBg ? "· bg: " + root.currentBg : "")
-            : "No repository synced yet — press Update to download themes."
+            : "No themes available yet."
           color: root.muted
           font.family: Style.font.family
           font.pixelSize: Style.font.caption

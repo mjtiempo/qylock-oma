@@ -194,9 +194,13 @@ Optional `shell.json` plugin entry (defaults shown):
 }
 ```
 
-The repository URL/branch can also be changed from the menu (Update button);
-that writes `~/.local/state/omarchy/mark.lock-themes/config.json`, which wins
-over `shell.json`. State and downloaded themes live under:
+The repository URL/branch is configured through the `shell.json` plugin entry
+(or `~/.local/state/omarchy/mark.lock-themes/config.json`, which wins over
+`shell.json`). The menu no longer shows an Update UI — sync happens
+automatically on start and can be triggered with
+`omarchy-shell mark.lock-themes sync`. Extra themes can be dropped directly
+into `~/.local/share/omarchy/mark.lock-themes/repo/themes/<name>/` and are
+picked up by the next scan. State and downloaded themes live under:
 
 - `~/.local/share/omarchy/mark.lock-themes/` — repo clone, installed lock app
 - `~/.local/state/omarchy/mark.lock-themes/` — status.json, themes.json, state
