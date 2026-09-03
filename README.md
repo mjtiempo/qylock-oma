@@ -220,6 +220,7 @@ Optional `shell.json` plugin entry (defaults shown):
 {
   "id": "mark.lock-themes",
   "repo": "https://github.com/Darkkal44/qylock.git",
+  "catalogRepo": "https://github.com/mjtiempo/qylock-oma-catalog.git",
   "branch": "",
   "lockThemeFile": "~/.config/qylock/theme",
   "lockAppSubdir": "quickshell-lockscreen",
@@ -239,12 +240,33 @@ picked up by the next scan. State and downloaded themes live under:
 - `~/.local/state/omarchy/mark.lock-themes/` — status.json, themes.json, state
 - `/etc/sddm.conf.d/theme.conf.bak.*` — backups taken before SDDM switches
 
+## Architecture (catalog + lazy assets)
+
+The plugin keeps the initial footprint small by splitting the data:
+
+- **Catalog repo** — [mjtiempo/qylock-oma-catalog](https://github.com/mjtiempo/qylock-oma-catalog)
+  (public, GPLv3): `index.json` (the theme list + flags) and small preview
+  PNGs (~3 MB). This is what fills the grid, so the picker opens instantly.
+- **Lazy asset cache** — `~/.local/share/omarchy/mark.lock-themes/assets/` is
+  a **blobless sparse clone** of the upstream qylock repo. Only
+  `quickshell-lockscreen` and the safe fallback theme (`girl-coffee`) are
+  materialized up front; each theme's files are fetched on demand when you
+  Apply, Preview, or prefetch:
+
+  ```sh
+  omarchy-shell mark.lock-themes fetchTheme forest   # ~53 MB for forest
+  ```
+
+  Unused themes cost a few KB (tree metadata only), so the cache holds ~10 MB
+  before any fetches and grows only with the themes you actually use
+  (previously the whole repo was cloned up front: ~1.6 GB).
+
 ## How it works
 
-- `Service.qml` (service kind, `keepLoaded`) owns the work: git sync with
-  `Quickshell.Io.Process`, theme scanning, the privileged SDDM install via
-  `pkexec` (prompted by the shell's own Polkit agent), and the lock app +
-  theme preference writes. It exposes an `IpcHandler` under
+- `Service.qml` (service kind, `keepLoaded`) owns the work: catalog sync with
+  `Quickshell.Io.Process`, the sparse per-theme asset fetches, the privileged
+  SDDM install via `pkexec` (prompted by the shell's own Polkit agent), and
+  the lock app + theme preference writes. It exposes an `IpcHandler` under
   `mark.lock-themes` and mirrors state to `status.json` / `themes.json`.
 - `Menu.qml` (menu kind) is a layer-shell surface that watches those files
   and sends requests through `request.json`.

@@ -32,6 +32,9 @@ Item {
   readonly property string dataDir: homeDir + "/.local/share/omarchy/" + pluginId
   readonly property string stateDir: homeDir + "/.local/state/omarchy/" + pluginId
   readonly property string repoDir: dataDir + "/repo"
+  readonly property string catalogDir: dataDir + "/catalog"
+  readonly property string assetsDir: dataDir + "/assets"
+  readonly property string catalogIndexFile: catalogDir + "/index.json"
   readonly property string lockAppDir: dataDir + "/lockscreen"
   readonly property string statusFile: stateDir + "/status.json"
   readonly property string themesFile: stateDir + "/themes.json"
@@ -48,6 +51,9 @@ Item {
   //     "autoSync": true }
   // and through the menu (written to stateDir/config.json, which wins).
   property string repoUrl: "https://github.com/Darkkal44/qylock.git"
+  // Small catalog repo: theme list + previews to populate the grid. The full
+  // theme assets (videos etc.) are fetched lazily per theme on Apply/Preview.
+  property string catalogRepo: "https://github.com/mjtiempo/qylock-oma-catalog.git"
   property string repoBranch: ""
   property string lockThemeFile: homeDir + "/.config/qylock/theme"
   property string lockAppSubdir: "quickshell-lockscreen"
@@ -314,6 +320,51 @@ Item {
     return ""
   }
 
+  // Builds the theme model from the catalog's index.json. The catalog carries
+  // names, flags and small previews; each entry's subpath points into the
+  // lazy asset clone (assetsDir/themes/<subpath>).
+  function parseCatalog(cb) {
+    root.readTextFile(root.catalogIndexFile, function(raw) {
+      var list = []
+      var entries = null
+      try { entries = JSON.parse(raw || "[]") } catch (e) { entries = null }
+      if (!Array.isArray(entries)) {
+        root.fail("Catalog index.json is invalid.")
+        return
+      }
+      for (var i = 0; i < entries.length; i++) {
+        var e = entries[i]
+        var name = String(e.name || "")
+        if (!name) continue
+        var sub = String(e.subpath || name)
+        var pv = String(e.preview || "")
+        list.push({
+          name: name,
+          subpath: sub,
+          main: e.main !== false,
+          conf: e.conf !== false,
+          meta: true,
+          background: "",
+          kind: e.video ? "video" : (String(e.color || "").length ? "color" : "image"),
+          color: String(e.color || ""),
+          video: e.video === true,
+          collection: false,
+          collectionOf: "",
+          flattenedFrom: String(e.flattenedFrom || ""),
+          risky: e.risky === true,
+          path: root.assetsDir + "/themes/" + sub,
+          gif: "",
+          preview: (pv && pv.length > 0) ? root.catalogDir + "/" + pv : ""
+        })
+      }
+      list.sort(function(a, b) { return a.name.localeCompare(b.name) })
+      root.themes = list
+      root.themeCount = list.length
+      root.writeJson(root.themesFile, root.themes)
+      if (cb) cb()
+    })
+  }
+
   function parseScan(raw) {
     var list = []
     var lines = String(raw || "").split("\n")
@@ -454,48 +505,86 @@ Item {
   }
 
   function doCloneOrPull() {
-    root.setBusy("syncing", "Syncing " + root.repoName + "…")
+    // Sync the lightweight catalog (list + previews); the heavy theme assets
+    // live in a blobless sparse clone and are fetched per theme on demand.
+    root.setBusy("syncing", "Syncing theme catalog…")
     var branchClause = root.repoBranch.length > 0 ? " --branch " + shq(root.repoBranch) : ""
     runCmd(["bash", "-c",
-      "set -u; src=" + shq(root.repoUrl) + "; dir=" + shq(root.repoDir) +
+      "set -u; src=" + shq(root.catalogRepo) + "; dir=" + shq(root.catalogDir) +
       "; mkdir -p " + shq(root.dataDir) +
-      // One sync at a time, even across shell restarts.
       "; exec 9> " + shq(root.stateDir + "/sync.lock") + "; flock -n 9 || { echo ALREADY_SYNCING; exit 3; }" +
       "; if [ -d \"$dir/.git\" ]; then cur=$(git -C \"$dir\" remote get-url origin 2>/dev/null || true)" +
       "; if [ -n \"$cur\" ] && [ \"$cur\" = \"$src\" ]; then git -C \"$dir\" pull --ff-only --quiet 2>/dev/null || git -C \"$dir\" pull --quiet || { echo PULL_FAILED; exit 1; }" +
       "; else rm -rf \"$dir\"; git clone --depth 1" + branchClause + " \"$src\" \"$dir\" || { echo CLONE_FAILED; exit 1; }; fi" +
       "; else rm -rf \"$dir\"; git clone --depth 1" + branchClause + " \"$src\" \"$dir\" || { echo CLONE_FAILED; exit 1; }; fi" +
-      "; git -C \"$dir\" branch --show-current 2>/dev/null || true" +
-      "; git -C \"$dir\" rev-parse --short HEAD 2>/dev/null || true" +
-      "; [ -d \"$dir/themes\" ] && echo __COMPAT__ || echo __NOCOMPAT__"], function(code, out, err) {
+      "; [ -f \"$dir/index.json\" ] && echo __CATALOG__ || echo __NO_CATALOG__"], function(code, out, err) {
       if (code === 3) {
         root.setDone("idle", "A sync is already in progress — waiting for it to finish.")
         return
       }
       if (code !== 0) {
-        root.fail("Repository sync failed: " + String(out || err).trim())
+        root.fail("Catalog sync failed: " + String(out || err).trim())
         return
       }
-      var lines = String(out || "").split("\n")
-      root.branchNow = ""
-      root.commitNow = ""
-      root.compatible = false
-      for (var i = 0; i < lines.length; i++) {
-        var line = lines[i].trim()
-        if (line === "__COMPAT__") root.compatible = true
-        else if (line === "__NOCOMPAT__") root.compatible = false
-        else if (/^[0-9a-f]{7,}$/.test(line) && root.commitNow.length === 0) root.commitNow = line
-        else if (line.length > 0 && line.indexOf("__") !== 0) root.branchNow = line
+      if (String(out || "").indexOf("__CATALOG__") === -1) {
+        root.fail("Catalog repository is not valid: no index.json found.")
+        return
       }
       root.repoCloned = true
-      if (!root.compatible) {
-        root.fail("Repository is not compatible: no themes/ directory found")
+      root.parseCatalog(function() {
+        root.prepareAssetsBase(function(ok, note) {
+          if (!ok) { root.fail(note); return }
+          if (!root.lockAppInstalled) {
+            root.installLockAppInner(function(ok2, note2) {
+              if (ok2) root.setDone("idle", "Synced " + root.themeCount + " themes (catalog). " + note2)
+              else root.fail(note2)
+            })
+          } else {
+            root.setDone("idle", "Synced " + root.themeCount + " themes (catalog). Theme assets are fetched on Apply / Preview.")
+          }
+        })
+      })
+    })
+  }
+
+  // Blobless sparse clone of the theme source: only the safe fallback theme
+  // and the lock app are materialized up front; everything else is added per
+  // theme by ensureThemeAssets().
+  function prepareAssetsBase(cb) {
+    var src = root.repoUrl
+    runCmd(["bash", "-c",
+      "set -u; src=" + shq(src) + "; dir=" + shq(root.assetsDir) +
+      "; mkdir -p " + shq(root.dataDir) +
+      "; if [ -d \"$dir/.git\" ]; then cur=$(git -C \"$dir\" remote get-url origin 2>/dev/null || true)" +
+      "; if [ -n \"$cur\" ] && [ \"$cur\" = \"$src\" ]; then git -C \"$dir\" fetch --filter=blob:none --quiet origin 2>/dev/null || true" +
+      "; else rm -rf \"$dir\"; git clone --filter=blob:none --sparse \"$src\" \"$dir\" 2>/dev/null || { echo CLONE_FAILED; exit 1; }; fi" +
+      "; else rm -rf \"$dir\"; git clone --filter=blob:none --sparse \"$src\" \"$dir\" 2>/dev/null || { echo CLONE_FAILED; exit 1; }; fi" +
+      "; git -C \"$dir\" sparse-checkout set --no-cone quickshell-lockscreen themes/girl-coffee 2>/dev/null" +
+      "; git -C \"$dir\" checkout --quiet 2>/dev/null || true" +
+      "; [ -d \"$dir/quickshell-lockscreen\" ] && echo __BASE_OK__ || echo __BASE_FAIL__"], function(code, out, err) {
+      if (String(out || "").indexOf("__BASE_OK__") === -1) {
+        cb(false, "Could not prepare the asset cache (" + String(err || out).trim() + ")")
         return
       }
-      root.sanitizeThemeSymlinks()
-      root.scanThemes(function() {
-        root.checkLockAppPresence()
-      })
+      // The pre-Option-D full clone (repoDir) is obsolete; reclaim its disk.
+      runCmd(["bash", "-c", "rm -rf " + shq(root.repoDir)], null)
+      cb(true, "")
+    })
+  }
+
+  // Fetches one theme's assets (blobs for its sparse path) on demand.
+  function ensureThemeAssets(t, cb) {
+    if (!t || !t.subpath) { cb(false, "Unknown theme"); return }
+    if (!root.repoCloned) { cb(false, "Catalog not synced yet"); return }
+    var sub = String(t.subpath)
+    runCmd(["bash", "-c",
+      "dir=" + shq(root.assetsDir) + "; sub=" + shq(sub) +
+      "; if [ -f \"$dir/themes/$sub/Main.qml\" ]; then echo HAVE; exit 0; fi" +
+      "; git -C \"$dir\" sparse-checkout add --no-cone themes/\"$sub\" 2>/dev/null || git -C \"$dir\" sparse-checkout set --no-cone themes/\"$sub\" quickshell-lockscreen 2>/dev/null" +
+      "; git -C \"$dir\" checkout --quiet 2>/dev/null || { echo FETCH_FAIL; exit 1; }" +
+      "; [ -f \"$dir/themes/$sub/Main.qml\" ] && echo HAVE || echo FETCH_FAIL"], function(code, out) {
+      if (String(out || "").indexOf("HAVE") === 0) cb(true, "")
+      else cb(false, "Could not fetch assets for \"" + t.name + "\"")
     })
   }
 
@@ -522,11 +611,11 @@ Item {
 
   function installLockAppInner(cb) {
     runCmd(["bash", "-c",
-      "set -e; src=" + shq(root.repoDir + "/" + root.lockAppSubdir) + "; dst=" + shq(root.lockAppDir) +
-      "; repo=" + shq(root.repoDir) +
+      "set -e; src=" + shq(root.assetsDir + "/" + root.lockAppSubdir) + "; dst=" + shq(root.lockAppDir) +
+      "; themes=" + shq(root.assetsDir + "/themes") +
       "; [ -d \"$src\" ] || { echo NO_LOCK_APP; exit 2; }" +
       "; rm -rf \"$dst\"; mkdir -p \"$(dirname \"$dst\")\"; cp -a \"$src\" \"$dst\"" +
-      "; ln -sfn \"$repo/themes\" \"$dst/themes_link\"" +
+      "; ln -sfn \"$themes\" \"$dst/themes_link\"" +
       // Some qylock themes use SDDM's `keyboard` context object; the lock app
       // does not define it. Inject a tiny inert shim so those themes load clean.
       "; if ! grep -q 'keyboard:' \"$dst/lock_shell.qml\" 2>/dev/null; then perl -0pi -e 's/ShellRoot \{/ShellRoot {\\n    property var keyboard: QtObject {\\n        property bool numLock: false\\n        property bool capsLock: false\\n        property bool scrollLock: false\\n        property string layout: \"\"\\n        property string currentLayout: \"\"\\n        property var layouts: []\\n        function setLayout() {}\\n    }/' \"$dst/lock_shell.qml\"; fi" +
@@ -656,14 +745,17 @@ Item {
       return
     }
     root.setBusy("applying-theme", "Applying \"" + name + "\" to lock + SDDM…")
-    root.installSddmInner(name, function(ok, msg) {
-      if (!ok) {
-        root.fail(msg)
-        return
-      }
-      root.writeLockThemeFiles(name)
-      root.currentLock = name
-      root.setDone("idle", "\"" + name + "\" applied to the lock and SDDM (SDDM shows at next login).")
+    root.ensureThemeAssets(t, function(ok, note) {
+      if (!ok) { root.fail("Could not fetch \"" + name + "\" assets: " + note); return }
+      root.installSddmInner(name, function(ok2, msg) {
+        if (!ok2) {
+          root.fail(msg)
+          return
+        }
+        root.writeLockThemeFiles(name)
+        root.currentLock = name
+        root.setDone("idle", "\"" + name + "\" applied to the lock and SDDM (SDDM shows at next login).")
+      })
     })
   }
 
@@ -674,17 +766,28 @@ Item {
       root.fail("Unknown theme: " + name)
       return
     }
-    if (!t.preview) {
-      root.fail(name + " has no image background to apply (video or solid-color theme).")
+    if (t.video) {
+      root.fail(name + " has no image background to apply (video theme).")
       return
     }
     root.setBusy("applying-background", "Applying " + t.name + " background…")
-    runCmd(["bash", "-c", "omarchy theme bg set " + shq(t.preview)], function(code, out, err) {
-      if (code === 0) {
-        root.setDone("idle", "Background applied: " + t.name + " — the Omarchy lock screen and wallpaper now use its artwork.")
-      } else {
-        root.fail("Background apply failed: " + String(err || out).trim())
-      }
+    root.ensureThemeAssets(t, function(ok, note) {
+      if (!ok) { root.fail("Could not fetch \"" + t.name + "\" assets: " + note); return }
+      runCmd(["bash", "-c",
+        "d=" + shq(root.assetsDir + "/themes/" + t.subpath) +
+        "; bg=$(grep -E '^background=' \"$d/theme.conf\" 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' \r' | head -1)" +
+        "; if [ -n \"$bg\" ] && [ -f \"$d/$bg\" ]; then printf '%s' \"$d/$bg\"; else exit 1; fi"], function(code2, out2) {
+        if (code2 !== 0) { root.fail(t.name + " has no image background to apply."); return }
+        var bgPath = String(out2 || "").trim()
+        runCmd(["bash", "-c", "omarchy theme bg set " + shq(bgPath)], function(code3, out3, err3) {
+          if (code3 === 0) {
+            root.currentBg = t.name
+            root.setDone("idle", "Background applied: " + t.name + " — the Omarchy lock screen and wallpaper now use its artwork.")
+          } else {
+            root.fail("Background apply failed: " + String(err3 || out3).trim())
+          }
+        })
+      })
     })
   }
 
@@ -711,6 +814,7 @@ Item {
       var p = plugins[i]
       if (p && String(p.id || "") === root.pluginId) {
         if (p.repo) root.repoUrl = String(p.repo)
+        if (p.catalogRepo) root.catalogRepo = String(p.catalogRepo)
         if (p.branch) root.repoBranch = String(p.branch)
         if (p.lockThemeFile) root.lockThemeFile = root.expandHome(String(p.lockThemeFile))
         if (p.lockAppSubdir) root.lockAppSubdir = String(p.lockAppSubdir)
@@ -732,6 +836,7 @@ Item {
     try { cfg = JSON.parse(raw) } catch (e) { return }
     root.storedConfig = cfg
     if (cfg && cfg.repo && String(cfg.repo).length > 3) root.repoUrl = String(cfg.repo)
+    if (cfg && cfg.catalogRepo && String(cfg.catalogRepo).length > 3) root.catalogRepo = String(cfg.catalogRepo)
     if (cfg && cfg.branch) root.repoBranch = String(cfg.branch)
     if (cfg && cfg.lockMode) {
       var mode = String(cfg.lockMode)
@@ -741,7 +846,7 @@ Item {
 
   function mergedConfig(overrides) {
     var merged = {}
-    var keys = ["repo", "branch", "lockMode"]
+    var keys = ["repo", "branch", "lockMode", "catalogRepo"]
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i]
       if (root.storedConfig && root.storedConfig[k] !== undefined) merged[k] = root.storedConfig[k]
@@ -804,6 +909,7 @@ Item {
     else if (op === "setLockMode") root.setLockMode(name)
     else if (op === "testLock") { var r = root.themedLock(); if (r !== "ok") root.fail("Cannot start themed lock: " + r) }
     else if (op === "previewLock") { var r2 = root.previewLock(name); if (r2 !== "ok") root.fail("Cannot preview lock: " + r2) }
+    else if (op === "fetchTheme") { var r3 = root.fetchTheme(name); if (r3 !== "started") root.fail("Cannot fetch theme: " + r3) }
     else root.fail("Unknown request op: " + op)
   }
 
@@ -1009,8 +1115,19 @@ Item {
     if (root.themedLockActive) return "ok"
     if (!root.lockAppInstalled) return "no-lock-app"
     if (!root.repoCloned) return "not-synced"
+    var theme = root.activeLockTheme()
+    var t = root.findTheme(theme)
+    if (t) {
+      root.setBusy("fetching-assets", "Fetching " + theme + " assets…")
+      root.ensureThemeAssets(t, function(ok, note) {
+        if (!ok) { root.fail("Could not fetch \"" + theme + "\" assets: " + note); return }
+        root.lockFallbacksLeft = 1
+        root.launchLockProc(theme)
+      })
+      return "started"
+    }
     root.lockFallbacksLeft = 1
-    root.launchLockProc(root.activeLockTheme())
+    root.launchLockProc(theme)
     return "ok"
   }
 
@@ -1023,9 +1140,15 @@ Item {
     if (!t.main) return "not-a-theme"
     if (!root.lockAppInstalled) return "no-lock-app"
     if (!root.repoCloned) return "not-synced"
-    root.lockFallbacksLeft = 1
-    root.launchLockProc(t.name)
-    return "ok"
+    // Fetch the theme's assets on demand before locking with it
+    // (ensureThemeAssets short-circuits when the files are already present).
+    root.setBusy("fetching-assets", "Fetching " + t.name + " assets…")
+    root.ensureThemeAssets(t, function(ok, note) {
+      if (!ok) { root.fail("Could not fetch \"" + t.name + "\" assets: " + note); return }
+      root.lockFallbacksLeft = 1
+      root.launchLockProc(t.name)
+    })
+    return "started"
   }
 
   function lockStatusPayload() {
@@ -1099,6 +1222,18 @@ Item {
     function status(): string {
       return JSON.stringify(root.lockStatusPayload())
     }
+  }
+
+  // Fetches a theme's assets on demand (also useful for prefetching).
+  function fetchTheme(name) {
+    var t = root.findTheme(name)
+    if (!t) return "unknown-theme"
+    root.setBusy("fetching-assets", "Fetching " + name + " assets…")
+    root.ensureThemeAssets(t, function(ok, note) {
+      if (ok) root.setDone("idle", "Assets for \"" + name + "\" are ready.")
+      else root.fail("Could not fetch \"" + name + "\" assets: " + note)
+    })
+    return "started"
   }
 
   // ------------------------------------------------- launcher registration
@@ -1195,6 +1330,10 @@ Item {
 
     function previewLock(name: string): string {
       return root.previewLock(name)
+    }
+
+    function fetchTheme(name: string): string {
+      return root.fetchTheme(name)
     }
   }
 
