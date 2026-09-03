@@ -27,6 +27,35 @@ Works out of the box with [qylock](https://github.com/Darkkal44/qylock)
 └── quickshell-lockscreen/ # optional: the repo's Quickshell lock app (lock.sh, lock_shell.qml, shim/, imports/)
 ```
 
+## Theme source
+
+All themes, the Quickshell lock app, and the animated previews come from:
+
+- **Repository:** [Darkkal44/qylock](https://github.com/Darkkal44/qylock)
+  by **Darkkal44** — "a bunch of lockscreen themes for SDDM and Quickshell"
+- `themes/<name>/` — the SDDM/lock theme set (Main.qml + theme.conf +
+  metadata.desktop + background art + bundled fonts where license permits)
+- `quickshell-lockscreen/` — the repo's Quickshell lock app
+  (lock.sh, lock_shell.qml, shim/, imports/), installed at
+  `~/.local/share/omarchy/mark.lock-themes/lockscreen/`
+- `Assets/*.gif` — the animated previews shown in the theme grid (from
+  qylock's README gallery)
+
+The fonts, artwork, and theme designs are the property of their respective
+creators; several themes need a font that cannot be bundled (see qylock's
+README "Font Requirements" table — e.g. Genshin, NieR, Terraria, Minecraft).
+This plugin downloads the repository at runtime; it does not redistribute the
+themes.
+
+### Third-party license
+
+The downloaded repository (themes + lock app) is released under
+**GPLv3** by Darkkal44. The plugin code in this repository is **MIT** — it
+does not bundle any qylock content; it fetches and uses it as a data source
+on the user's machine. If you redistribute this plugin together with
+downloaded theme content, the combined distribution is governed by the
+themes' GPLv3 terms.
+
 ## Install
 
 ```sh
@@ -176,4 +205,5 @@ over `shell.json`. State and downloaded themes live under:
 
 ## License
 
-MIT — see LICENSE.
+MIT — see LICENSE (plugin code). Downloaded themes and the lock app are
+GPLv3, © Darkkal44 — see "Theme source" above.
