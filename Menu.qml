@@ -60,19 +60,12 @@ Item {
   property string phase: "idle"
   property string message: "Loading…"
   property bool busy: false
-  property bool gitAvailable: true
-  property string repoName: "…"
-  property string branchNow: ""
-  property string commitNow: ""
   property int themeCount: 0
   property string currentSddm: ""
   property string currentLock: ""
   property string currentBg: ""
   property bool lockAppInstalled: false
-  property string lockMode: "native"
   property bool themedLockActive: false
-  property string lockAppDir: ""
-  property string lockThemeFile: ""
   property var themeList: []
 
   // ---------------------------------------------------------------- styling
@@ -95,10 +88,15 @@ Item {
   readonly property int footerBlock: Style.space(40)
   readonly property int tileGap: Style.space(14)
   readonly property int rowsVisible: 3
-  property int gridHeight: root.rowsVisible * (root.tileHeight + root.tileGap)
+  // Nominal (unclamped) grid for 3 rows; the visible grid is clamped to the
+  // card's remaining space so the scrollbar always maps against the visible
+  // track even when the card height is limited.
+  readonly property int gridNominal: root.rowsVisible * (root.tileHeight + root.tileGap)
   property int cardHeight: Math.min(
-    root.padding * 2 + root.headerBlock + root.gridHeight + root.footerBlock,
+    root.padding * 2 + root.headerBlock + root.gridNominal + root.footerBlock,
     panel.height - Style.gapsOut * 2)
+  property int gridHeight: Math.max(Style.space(160),
+    Math.min(root.gridNominal, cardHeight - root.padding * 2 - root.headerBlock - root.footerBlock))
   // Exact fit: columns*tileGap so the four cells (incl. their right/side
   // gaps) never exceed the available width -> the 4th column is never clipped.
   property int tileWidth: Math.floor((cardWidth - root.padding * 2 - root.columns * root.tileGap) / root.columns)
@@ -151,19 +149,12 @@ Item {
     if (j.phase) root.phase = String(j.phase)
     if (j.message) root.message = String(j.message)
     if (typeof j.busy === "boolean") root.busy = j.busy
-    if (typeof j.gitAvailable === "boolean") root.gitAvailable = j.gitAvailable
-    if (j.repoName) root.repoName = String(j.repoName)
-    if (j.branch) root.branchNow = String(j.branch)
-    if (j.commit) root.commitNow = String(j.commit)
     if (typeof j.themeCount === "number") root.themeCount = j.themeCount
     if (typeof j.currentSddm === "string") root.currentSddm = j.currentSddm
     if (typeof j.currentLock === "string") root.currentLock = j.currentLock
     if (typeof j.currentBg === "string") root.currentBg = j.currentBg
     if (typeof j.lockAppInstalled === "boolean") root.lockAppInstalled = j.lockAppInstalled
-    if (j.lockMode === "themed" || j.lockMode === "native") root.lockMode = String(j.lockMode)
     if (typeof j.themedLockActive === "boolean") root.themedLockActive = j.themedLockActive
-    if (j.lockAppDir) root.lockAppDir = String(j.lockAppDir)
-    if (j.lockThemeFile) root.lockThemeFile = String(j.lockThemeFile)
   }
 
   function applyThemes(raw) {
@@ -256,6 +247,13 @@ Item {
       y: Math.max(Style.gapsOut, Math.round((panel.height - height) / 2))
       clip: true
 
+      // Swallow clicks on non-interactive card areas (title, gaps) so they
+      // don't fall through to the scrim and close the menu.
+      MouseArea {
+        anchors.fill: parent
+        onClicked: {}
+      }
+
       Column {
         width: parent.width - root.padding * 2
         anchors.horizontalCenter: parent.horizontalCenter
@@ -271,6 +269,18 @@ Item {
           font.pixelSize: Style.font.title + 4
           font.bold: true
           elide: Text.ElideRight
+        }
+
+        // Status feedback: only shown when it matters (error / working /
+        // empty) so the header stays clean otherwise.
+        Text {
+          width: parent.width
+          visible: root.busy || root.phase === "error" || root.themeCount === 0
+          text: root.themeCount === 0 ? "No themes available yet." : root.message
+          color: root.phase === "error" ? Color.urgent : root.accent
+          font.family: Style.font.family
+          font.pixelSize: Style.font.body
+          wrapMode: Text.WordWrap
         }
 
         // -------------------------------------------------------------- tabs
@@ -322,13 +332,37 @@ Item {
             border.color: root.accent
 
             required property var modelData
-            required property int index
 
             MouseArea {
               anchors.fill: parent
               enabled: !root.busy && modelData.main
               cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
               onClicked: root.selectTheme(modelData.name)
+            }
+
+            // Applied marker: small badge (no selection highlight, but the
+            // active theme stays identifiable at a glance). Sibling of the
+            // Column so it can anchor to the tile (Column children can't).
+            Rectangle {
+              visible: root.isCurrent(modelData.name)
+              height: Style.space(20)
+              width: appliedText.implicitWidth + Style.space(12)
+              radius: height / 2
+              color: Util.alpha(Color.accent, 0.16)
+              anchors.left: parent.left
+              anchors.bottom: parent.bottom
+              anchors.leftMargin: Style.space(6)
+              anchors.bottomMargin: Style.space(10)
+
+              Text {
+                id: appliedText
+                anchors.centerIn: parent
+                text: "applied"
+                color: root.accent
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                font.bold: true
+              }
             }
 
             Column {
@@ -446,6 +480,8 @@ Item {
             MouseArea {
               id: dragArea
               anchors.fill: parent
+              // Wider hit target than the 5px visual strip (Fitts' law)
+              anchors.leftMargin: -Style.space(11)
               preventStealing: true
               cursorShape: Qt.PointingHandCursor
               property real grabY: 0

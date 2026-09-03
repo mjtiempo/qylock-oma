@@ -111,10 +111,18 @@ Open the theme menu (bind it, e.g. `SUPER+SHIFT+L`):
 omarchy-shell shell summon mark.lock-themes '{}'
 ```
 
-The menu shows the synced repository, its status, and one row per theme with
-three actions: **Lock** (lock screen theme), **SDDM** (login screen theme),
-**BG** (apply the theme artwork to the Omarchy lock/wallpaper). The row marks
-the currently applied themes; `Escape` closes the menu.
+The picker is a square theme grid with two tabs:
+
+- **Lock & SDDM** — click a theme card to select it; **Preview** and **Apply**
+  buttons appear on the card. **Preview** locks now with that theme (without
+  changing your selection); **Apply** sets both the lock theme and the SDDM
+  login theme (one Polkit prompt for the SDDM part).
+- **Background** — click a card, then **Apply** to use its artwork as the
+  Omarchy background (lock screen + wallpaper).
+
+The currently applied theme carries a small green **applied** badge (no
+highlight); the selected card is highlighted green with its action buttons.
+A scrollbar on the right scrolls the grid (`Escape` closes).
 
 Everything can also be driven from the command line:
 
