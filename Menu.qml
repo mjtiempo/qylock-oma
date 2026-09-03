@@ -458,6 +458,29 @@ Item {
               color: Util.alpha(Color.menu.text, 0.35)
               height: Math.max(Style.space(28), themeGrid.visibleArea.heightRatio * (scrollTrack.height - Style.space(4)))
               y: themeGrid.visibleArea.yRatio * (scrollTrack.height - height)
+
+              // Drag the handle to scroll; value mirrors the grid's content.
+              MouseArea {
+                id: dragArea
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                preventStealing: true
+                function setFromY(yy) {
+                  var track = scrollTrack.height
+                  var hh = scrollHandle.height
+                  var f = (yy - hh / 2) / Math.max(1, track - hh)
+                  f = Math.min(Math.max(f, 0), 1)
+                  themeGrid.contentY = f * Math.max(0, themeGrid.contentHeight - themeGrid.height)
+                }
+                onPressed: setFromY(mouseY)
+                onPositionChanged: if (pressed) setFromY(mouseY)
+              }
+            }
+
+            // Click/tap the track to jump to that position.
+            MouseArea {
+              anchors.fill: parent
+              onPressed: dragArea.setFromY(mouseY)
             }
           }
         }
