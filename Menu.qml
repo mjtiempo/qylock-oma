@@ -100,7 +100,7 @@ Item {
   // Exact fit: columns*tileGap so the four cells (incl. their right/side
   // gaps) never exceed the available width -> the 4th column is never clipped.
   property int tileWidth: Math.floor((cardWidth - root.padding * 2 - root.columns * root.tileGap) / root.columns)
-  property int tileHeight: tileWidth + Style.space(60)
+  property int tileHeight: tileWidth + Style.space(50)
 
   // ---------------------------------------------------------------- actions
   function shq(s) {
@@ -337,10 +337,10 @@ Item {
             width: root.tileWidth
             height: root.tileHeight
             radius: Style.cornerRadius - 2
-            color: (root.isCurrent(modelData.name) || root.isSelected(modelData.name))
+            color: (root.isSelected(modelData.name) && !root.isCurrent(modelData.name))
                  ? Style.selectionFillFor(root.accent, root.accent)
                  : Style.selectionFillFor(root.foreground, root.accent)
-            border.width: (root.isCurrent(modelData.name) || root.isSelected(modelData.name)) ? 1 : 0
+            border.width: (root.isSelected(modelData.name) && !root.isCurrent(modelData.name)) ? 1 : 0
             border.color: root.accent
 
             required property var modelData
@@ -403,30 +403,17 @@ Item {
               Text {
                 width: parent.width
                 text: modelData.name
-                color: root.foreground
+                    + (modelData.risky ? " ⚠" : "")
+                    + (root.isCurrent(modelData.name) ? " - active"
+                       : root.isSelected(modelData.name) ? " - selected"
+                       : "")
+                color: root.isCurrent(modelData.name) ? root.foreground : root.foreground
                 font.family: Style.font.family
                 font.pixelSize: Style.font.subtitle
                 font.bold: true
-                elide: Text.ElideRight
-                horizontalAlignment: Text.AlignHCenter
-              }
-
-              Text {
-                width: parent.width
-                text: {
-                  var parts = []
-                  if (modelData.risky) parts.push("⚠")
-                  if (modelData.collection) parts.push("collection")
-                  if (modelData.flattenedFrom) parts.push("·")
-                  if (modelData.main && modelData.conf) parts.push("lock-ready")
-                  if (root.isSelected(modelData.name)) parts.push("● selected")
-                  else if (root.isCurrent(modelData.name)) parts.push("● current")
-                  return parts.join(" ")
-                }
-                color: root.isCurrent(modelData.name) ? root.accent : root.muted
-                font.family: Style.font.family
-                font.pixelSize: Style.font.bodySmall
-                elide: Text.ElideRight
+                // Keep the name AND the - active/- selected suffix visible:
+                // elide the middle of long names, never the suffix.
+                elide: Text.ElideMiddle
                 horizontalAlignment: Text.AlignHCenter
               }
             }
