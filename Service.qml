@@ -1270,11 +1270,14 @@ Item {
       " && (command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database " +
       shq(root.homeDir + "/.local/share/applications") + " >/dev/null 2>&1 || true); true"], null)
 
-    // Omarchy menu row (insert only when the key is missing)
+    // Omarchy menu row: nested under the built-in "Style" section
+    // (style.qylock). Removes a legacy root-level "qylock" entry if one was
+    // left by earlier versions.
     root.readTextFile(menuFile, function(text) {
-      if (String(text).indexOf('"qylock"') !== -1) return
-      var line = "  \"qylock\": {\"icon\":\"" + glyph + "\",\"label\":\"QyLock Oma\",\"description\":\"SDDM and lock theme picker\",\"action\":\"" + exec + "\"},\n"
-      var body = String(text || "").trim()
+      var raw = String(text || "")
+      if (raw.indexOf('"style.qylock"') !== -1) return
+      var body = raw.replace(/\s*"qylock":\s*\{[^}]*\},\s*/g, "").trim()
+      var line = "  \"style.qylock\": {\"icon\":\"" + glyph + "\",\"label\":\"QyLock Oma\",\"description\":\"SDDM and lock theme picker\",\"action\":\"" + exec + "\"},\n"
       var updated = body.replace(/\n\s*\}\s*$/, "\n" + line + "}\n")
       if (updated === body) updated = "{\n" + line + "}\n"
       runCmd(["bash", "-c", "mkdir -p " + shq(root.homeDir + "/.config/omarchy/extensions") +

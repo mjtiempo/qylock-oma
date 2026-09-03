@@ -111,10 +111,11 @@ omarchy restart shell
 On first load the plugin registers itself, so installing users need to do
 nothing manual:
 
-- **Omarchy menu row** — a `QyLock Oma` entry (searchable: `qylock`, `lock`,
-  `sddm`, `theme`) is added to
+- **Omarchy menu row** — a `QyLock Oma` entry under the **Style** section
+  (searchable: `qylock`, `lock`, `sddm`, `theme`) is added to
   `~/.config/omarchy/extensions/omarchy-menu.jsonc` (only if the key is
-  missing; existing entries are untouched). It summons the picker.
+  missing; existing entries are untouched; a legacy root-level entry from
+  older versions is migrated automatically). It summons the picker.
 - **Desktop entry** — `~/.local/share/applications/qylock-oma.desktop` makes
   it appear in the launcher/Apps search, with the plugin's `preview.png` as
   its icon.
