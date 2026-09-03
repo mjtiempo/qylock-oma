@@ -450,6 +450,20 @@ Item {
             color: "transparent"
             visible: themeGrid.visibleArea.heightRatio < 1
 
+            // Track press/tap: jump so the handle centers under the cursor.
+            // Declared before the handle so the handle's own MouseArea wins
+            // when the press lands on it.
+            MouseArea {
+              anchors.fill: parent
+              onPressed: {
+                var track = scrollTrack.height
+                var hh = scrollHandle.height
+                var f = (mouseY - hh / 2) / Math.max(1, track - hh)
+                f = Math.min(Math.max(f, 0), 1)
+                themeGrid.contentY = f * Math.max(0, themeGrid.contentHeight - themeGrid.height)
+              }
+            }
+
             Rectangle {
               id: scrollHandle
               anchors.horizontalCenter: parent.horizontalCenter
@@ -459,28 +473,35 @@ Item {
               height: Math.max(Style.space(28), themeGrid.visibleArea.heightRatio * (scrollTrack.height - Style.space(4)))
               y: themeGrid.visibleArea.yRatio * (scrollTrack.height - height)
 
-              // Drag the handle to scroll; value mirrors the grid's content.
+              // Drag the handle. mouseX/Y are handle-relative, so map them
+              // into the track's coordinates before computing the position.
               MouseArea {
                 id: dragArea
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 preventStealing: true
-                function setFromY(yy) {
+                property real grabY: 0
+
+                function trackY() {
+                  var p = dragArea.mapToItem(scrollTrack, mouse.x, mouse.y)
+                  return p.y
+                }
+
+                function applyFrom(py) {
                   var track = scrollTrack.height
                   var hh = scrollHandle.height
-                  var f = (yy - hh / 2) / Math.max(1, track - hh)
+                  // Keep the grabbed point of the handle under the cursor.
+                  var f = (py - dragArea.grabY) / Math.max(1, track - hh)
                   f = Math.min(Math.max(f, 0), 1)
                   themeGrid.contentY = f * Math.max(0, themeGrid.contentHeight - themeGrid.height)
                 }
-                onPressed: setFromY(mouseY)
-                onPositionChanged: if (pressed) setFromY(mouseY)
-              }
-            }
 
-            // Click/tap the track to jump to that position.
-            MouseArea {
-              anchors.fill: parent
-              onPressed: dragArea.setFromY(mouseY)
+                onPressed: {
+                  dragArea.grabY = trackY() - scrollHandle.y
+                  applyFrom(trackY())
+                }
+                onPositionChanged: if (pressed) applyFrom(trackY())
+              }
             }
           }
         }
