@@ -47,6 +47,15 @@ README "Font Requirements" table — e.g. Genshin, NieR, Terraria, Minecraft).
 This plugin downloads the repository at runtime; it does not redistribute the
 themes.
 
+### Orbital lock themes
+
+The `clockwork-orbital` and `clockwork-neo-orbital` themes (bundled in
+qylock's `themes/clockwork/` collection) follow the **orbital** lock style
+from [dumidulkdev/omarchy-orbital-lock](https://github.com/dumidulkdev/omarchy-orbital-lock)
+— the Omarchy orbital lock-screen extension plugin by **Dumidul**, which this
+project coexists with (its installed copy, `dumidu.orbital-lock`, can be
+re-enabled by switching Lock screen back to Native).
+
 ### Third-party license
 
 The downloaded repository (themes + lock app) is released under
