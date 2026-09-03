@@ -317,15 +317,20 @@ Item {
         }
 
         // -------------------------------------------------------------- grid
-        GridView {
-          id: themeGrid
+        // Grid + always-visible scrollbar (thin, right edge)
+        Item {
           width: parent.width
           height: root.gridHeight
-          cellWidth: root.tileWidth + root.tileGap
-          cellHeight: root.tileHeight + root.tileGap
-          model: root.themeList
-          clip: true
-          boundsBehavior: Flickable.StopAtBounds
+
+          GridView {
+            id: themeGrid
+            width: parent.width
+            height: parent.height
+            cellWidth: root.tileWidth + root.tileGap
+            cellHeight: root.tileHeight + root.tileGap
+            model: root.themeList
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
 
           delegate: Rectangle {
             width: root.tileWidth
@@ -430,6 +435,29 @@ Item {
                     : root.request("applyBoth", modelData.name)
                 }
               }
+            }
+          }
+          }
+
+          // Visible scrollbar (grid scrolls; handle shrinks with content)
+          Rectangle {
+            id: scrollTrack
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: Style.space(5)
+            radius: width / 2
+            color: "transparent"
+            visible: themeGrid.visibleArea.heightRatio < 1
+
+            Rectangle {
+              id: scrollHandle
+              anchors.horizontalCenter: parent.horizontalCenter
+              width: parent.width
+              radius: width / 2
+              color: Util.alpha(Color.menu.text, 0.35)
+              height: Math.max(Style.space(28), themeGrid.visibleArea.heightRatio * (scrollTrack.height - Style.space(4)))
+              y: themeGrid.visibleArea.yRatio * (scrollTrack.height - height)
             }
           }
         }
