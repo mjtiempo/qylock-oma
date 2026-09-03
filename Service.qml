@@ -1124,7 +1124,7 @@ Item {
         root.lockFallbacksLeft = 1
         root.launchLockProc(theme)
       })
-      return "started"
+      return "ok"
     }
     root.lockFallbacksLeft = 1
     root.launchLockProc(theme)
@@ -1148,7 +1148,7 @@ Item {
       root.lockFallbacksLeft = 1
       root.launchLockProc(t.name)
     })
-    return "started"
+    return "ok"
   }
 
   function lockStatusPayload() {
