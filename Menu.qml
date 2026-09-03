@@ -205,7 +205,9 @@ Item {
     interval: 2000
     repeat: true
     running: root.opened
-    onTriggered: root.refreshNow()
+    onTriggered: {
+      root.refreshNow()
+    }
   }
 
   // --------------------------------------------------------------- surface
@@ -439,7 +441,8 @@ Item {
           }
           }
 
-          // Visible scrollbar (grid scrolls; handle shrinks with content)
+          // Visible scrollbar (single drag surface: press anywhere on the
+          // strip, drag to scroll; the handle simply reflects the position).
           Rectangle {
             id: scrollTrack
             anchors.right: parent.right
@@ -450,20 +453,6 @@ Item {
             color: "transparent"
             visible: themeGrid.visibleArea.heightRatio < 1
 
-            // Track press/tap: jump so the handle centers under the cursor.
-            // Declared before the handle so the handle's own MouseArea wins
-            // when the press lands on it.
-            MouseArea {
-              anchors.fill: parent
-              onPressed: {
-                var track = scrollTrack.height
-                var hh = scrollHandle.height
-                var f = (mouseY - hh / 2) / Math.max(1, track - hh)
-                f = Math.min(Math.max(f, 0), 1)
-                themeGrid.contentY = f * Math.max(0, themeGrid.contentHeight - themeGrid.height)
-              }
-            }
-
             Rectangle {
               id: scrollHandle
               anchors.horizontalCenter: parent.horizontalCenter
@@ -472,36 +461,29 @@ Item {
               color: Util.alpha(Color.menu.text, 0.35)
               height: Math.max(Style.space(28), themeGrid.visibleArea.heightRatio * (scrollTrack.height - Style.space(4)))
               y: themeGrid.visibleArea.yRatio * (scrollTrack.height - height)
+            }
 
-              // Drag the handle. mouseX/Y are handle-relative, so map them
-              // into the track's coordinates before computing the position.
-              MouseArea {
-                id: dragArea
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                preventStealing: true
-                property real grabY: 0
+            MouseArea {
+              id: dragArea
+              anchors.fill: parent
+              preventStealing: true
+              cursorShape: Qt.PointingHandCursor
+              property real grabY: 0
 
-                function trackY() {
-                  var p = dragArea.mapToItem(scrollTrack, mouse.x, mouse.y)
-                  return p.y
-                }
-
-                function applyFrom(py) {
-                  var track = scrollTrack.height
-                  var hh = scrollHandle.height
-                  // Keep the grabbed point of the handle under the cursor.
-                  var f = (py - dragArea.grabY) / Math.max(1, track - hh)
-                  f = Math.min(Math.max(f, 0), 1)
-                  themeGrid.contentY = f * Math.max(0, themeGrid.contentHeight - themeGrid.height)
-                }
-
-                onPressed: {
-                  dragArea.grabY = trackY() - scrollHandle.y
-                  applyFrom(trackY())
-                }
-                onPositionChanged: if (pressed) applyFrom(trackY())
+              function applyFrom(py) {
+                var track = scrollTrack.height
+                var hh = scrollHandle.height
+                var f = (py - dragArea.grabY) / Math.max(1, track - hh)
+                f = Math.min(Math.max(f, 0), 1)
+                var maxc = Math.max(0, themeGrid.contentHeight - themeGrid.height)
+                themeGrid.contentY = f * maxc
               }
+
+              onPressed: {
+                dragArea.grabY = Math.min(Math.max(mouseY - scrollHandle.y, 0), scrollHandle.height)
+                applyFrom(mouseY)
+              }
+              onPositionChanged: if (pressed) applyFrom(mouseY)
             }
           }
         }
