@@ -927,6 +927,10 @@ Item {
       var everSecured = root.everSecured
       root.themedLockActive = false
       root.sessionSecure = false
+      // Publish the state: the menu (and its Preview/Apply buttons) mirrors
+      // status.json — without this write the file stays "locked" after
+      // unlock, which disabled Preview for every subsequent theme.
+      root.writeStatus()
       if (wasActive && !everSecured && root.lockStartedAt > 0) root.handleLockDeath(everSecured)
       else if (wasActive) root.lockExitedCleanly = true
     }
