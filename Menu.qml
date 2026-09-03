@@ -91,7 +91,7 @@ Item {
   // margins (content anchors center, so no bottom-heavy black area).
   // Reserved header/footer heights matched to their actual content so the
   // card hugs the UI with no extra blank bands top or bottom.
-  readonly property int headerBlock: Style.space(132)
+  readonly property int headerBlock: Style.space(104)
   readonly property int footerBlock: Style.space(40)
   readonly property int tileGap: Style.space(14)
   readonly property int rowsVisible: 3
@@ -270,29 +270,6 @@ Item {
           font.family: Style.font.family
           font.pixelSize: Style.font.title + 4
           font.bold: true
-          elide: Text.ElideRight
-        }
-
-        Text {
-          width: parent.width
-          text: root.message
-          color: root.phase === "error" ? Color.urgent : root.muted
-          font.family: Style.font.family
-          font.pixelSize: Style.font.body
-          wrapMode: Text.WordWrap
-        }
-
-        Text {
-          width: parent.width
-          text: root.themeCount > 0
-            ? root.themeCount + " themes   " +
-              (root.currentSddm ? "· SDDM: " + root.currentSddm : "") + "   " +
-              (root.currentLock ? "· lock: " + root.currentLock : "") + "   " +
-              (root.currentBg ? "· bg: " + root.currentBg : "")
-            : "No themes available yet."
-          color: root.muted
-          font.family: Style.font.family
-          font.pixelSize: Style.font.body
           elide: Text.ElideRight
         }
 
