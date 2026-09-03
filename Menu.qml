@@ -89,8 +89,10 @@ Item {
   property int cardWidth: Math.min(Style.space(808), panel.width - Style.gapsOut * 2)
   // Centered card sized to its content: three full theme rows, symmetric
   // margins (content anchors center, so no bottom-heavy black area).
-  readonly property int headerBlock: Style.space(220)
-  readonly property int footerBlock: Style.space(52)
+  // Reserved header/footer heights matched to their actual content so the
+  // card hugs the UI with no extra blank bands top or bottom.
+  readonly property int headerBlock: Style.space(132)
+  readonly property int footerBlock: Style.space(40)
   readonly property int tileGap: Style.space(14)
   readonly property int rowsVisible: 3
   property int gridHeight: root.rowsVisible * (root.tileHeight + root.tileGap)
