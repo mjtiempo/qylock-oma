@@ -1107,6 +1107,11 @@ Item {
     lockDeathTimer.stop()
     root.lockStartedAt = Date.now()
     root.lockErrBase = String(lockProcErr.text || "").length
+    // A launched lock is not a "busy" operation; clear the transient status.
+    root.busy = false
+    root.phase = "idle"
+    root.message = "Locking with " + theme + "…"
+    root.writeStatus()
     lockProc.running = true
   }
 
