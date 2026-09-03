@@ -100,7 +100,7 @@ Item {
   // Exact fit: columns*tileGap so the four cells (incl. their right/side
   // gaps) never exceed the available width -> the 4th column is never clipped.
   property int tileWidth: Math.floor((cardWidth - root.padding * 2 - root.columns * root.tileGap) / root.columns)
-  property int tileHeight: tileWidth + Style.space(64)
+  property int tileHeight: tileWidth + Style.space(72)
 
   // ---------------------------------------------------------------- actions
   function shq(s) {
@@ -133,14 +133,6 @@ Item {
     else root.request("applyBoth", name)
   }
 
-  function previewSelected() {
-    root.request("previewLock", root.selected)
-  }
-
-  function applySelected() {
-    if (root.tab === "background") root.request("applyBackground", root.selected)
-    else root.request("applyBoth", root.selected)
-  }
 
 
   function isCurrent(name) {
@@ -411,17 +403,30 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
               }
 
-              // State line: 'active' (applied, no highlight) or 'selected'
-              Text {
+              // Action row: appears on the selected card (Preview only in the
+              // lock tab; Apply follows the current tab's behavior).
+              Row {
                 width: parent.width
-                visible: root.isCurrent(modelData.name) || root.isSelected(modelData.name)
-                text: root.isCurrent(modelData.name) ? "active" : "selected"
-                color: root.isSelected(modelData.name) && !root.isCurrent(modelData.name) ? root.accent : root.muted
-                font.family: Style.font.family
-                font.pixelSize: Style.font.bodySmall
-                font.bold: root.isSelected(modelData.name) && !root.isCurrent(modelData.name)
-                elide: Text.ElideRight
-                horizontalAlignment: Text.AlignHCenter
+                visible: root.isSelected(modelData.name)
+                spacing: Style.space(6)
+                anchors.horizontalCenter: parent.horizontalCenter
+
+                Button {
+                  text: "Preview"
+                  accent: root.accent
+                  visible: root.tab === "lock"
+                  enabled: !root.busy && root.lockAppInstalled && !root.themedLockActive
+                  onClicked: root.request("previewLock", modelData.name)
+                }
+
+                Button {
+                  text: "Apply"
+                  accent: root.accent
+                  enabled: !root.busy
+                  onClicked: root.tab === "background"
+                    ? root.request("applyBackground", modelData.name)
+                    : root.request("applyBoth", modelData.name)
+                }
               }
             }
           }
@@ -431,7 +436,7 @@ Item {
         Text {
           width: parent.width
           text: (root.tab === "lock"
-            ? "Apply sets the lock theme + SDDM (Polkit prompt at next login); Lock Preview locks now with the selected theme. "
+            ? "Apply sets the lock theme + SDDM (Polkit at next login); Preview locks now with it. "
             : "Apply changes the background instantly. ")
             + "Escape closes."
           color: root.muted
@@ -441,42 +446,6 @@ Item {
         }
       }
 
-      // --------------------------------------------- selection action bar
-      // Appears in the bottom-right corner when a theme is selected.
-      Rectangle {
-        id: actionBar
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.margins: root.padding
-        radius: Style.cornerRadius - 2
-        color: root.surface
-        border.width: 1
-        border.color: root.cardBorder
-        visible: root.selected.length > 0 && root.themeList.length > 0
-        width: actionRow.implicitWidth + Style.space(12)
-        height: actionRow.implicitHeight + Style.space(12)
-
-        Row {
-          id: actionRow
-          anchors.centerIn: parent
-          spacing: Style.space(8)
-
-          Button {
-            text: "Lock Preview"
-            accent: root.accent
-            visible: root.tab === "lock"
-            enabled: !root.busy && root.lockAppInstalled && !root.themedLockActive
-            onClicked: root.previewSelected()
-          }
-
-          Button {
-            text: "Apply"
-            accent: root.accent
-            enabled: !root.busy
-            onClicked: root.applySelected()
-          }
-        }
-      }
     }
   }
 
