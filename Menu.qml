@@ -451,7 +451,10 @@ Item {
             width: Style.space(5)
             radius: width / 2
             color: "transparent"
-            visible: themeGrid.visibleArea.heightRatio < 1
+            // Drive the handle straight from contentY/contentHeight — these
+            // always notify when the grid scrolls (programmatic or user),
+            // unlike the Flickable visibleArea grouped property.
+            visible: themeGrid.contentHeight > themeGrid.height
 
             Rectangle {
               id: scrollHandle
@@ -459,8 +462,8 @@ Item {
               width: parent.width
               radius: width / 2
               color: Util.alpha(Color.menu.text, 0.35)
-              height: Math.max(Style.space(28), themeGrid.visibleArea.heightRatio * (scrollTrack.height - Style.space(4)))
-              y: themeGrid.visibleArea.yRatio * (scrollTrack.height - height)
+              height: Math.max(Style.space(28), (themeGrid.height / Math.max(1, themeGrid.contentHeight)) * (scrollTrack.height - Style.space(4)))
+              y: (themeGrid.contentY / Math.max(1, themeGrid.contentHeight - themeGrid.height)) * (scrollTrack.height - height)
             }
 
             MouseArea {
