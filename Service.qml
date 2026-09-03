@@ -56,6 +56,9 @@ Item {
   // "themed" = this plugin answers the "lock" IPC target and runs the
   // repository's Quickshell lock with the selected theme.
   property string lockMode: "native"
+  // Automatically register launcher entries on first load: an Omarchy menu
+  // row (extensions/omarchy-menu.jsonc) + a desktop entry. Idempotent.
+  property bool autoEntries: true
   property var storedConfig: ({})
 
   // ------------------------------------------------------------- live state
@@ -1098,6 +1101,43 @@ Item {
     }
   }
 
+  // ------------------------------------------------- launcher registration
+  // One-time (idempotent) user-level wiring so installs need no manual steps:
+  //   · ~/.config/omarchy/extensions/omarchy-menu.jsonc -> "qylock" menu row
+  //   · ~/.local/share/applications/qylock-oma.desktop   -> launcher entry
+  function readTextFile(path, cb) {
+    runCmd(["cat", path], function(code, out) { cb(String(out || "")) })
+  }
+
+  function ensureLauncherEntries() {
+    if (!root.autoEntries) return
+    var menuFile = root.homeDir + "/.config/omarchy/extensions/omarchy-menu.jsonc"
+    var desktopFile = root.homeDir + "/.local/share/applications/qylock-oma.desktop"
+    var previewIcon = root.pluginDir + "/preview.png"
+    var exec = "omarchy-shell shell summon mark.lock-themes '{}'"
+    var glyph = "\ue8db"
+
+    // Desktop entry (rewrite every start; cheap and idempotent)
+    var desktop = "[Desktop Entry]\nName=QyLock Oma\nComment=SDDM and lock theme picker\nExec=" + exec +
+      "\nIcon=" + previewIcon + "\nTerminal=false\nType=Application\nCategories=Settings;System;\n"
+    runCmd(["bash", "-c",
+      "mkdir -p " + shq(root.homeDir + "/.local/share/applications") +
+      " && printf '%s' " + shq(desktop) + " > " + shq(desktopFile) +
+      " && (command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database " +
+      shq(root.homeDir + "/.local/share/applications") + " >/dev/null 2>&1 || true); true"], null)
+
+    // Omarchy menu row (insert only when the key is missing)
+    root.readTextFile(menuFile, function(text) {
+      if (String(text).indexOf('"qylock"') !== -1) return
+      var line = "  \"qylock\": {\"icon\":\"" + glyph + "\",\"label\":\"QyLock Oma\",\"description\":\"SDDM and lock theme picker\",\"action\":\"" + exec + "\"},\n"
+      var body = String(text || "").trim()
+      var updated = body.replace(/\n\s*\}\s*$/, "\n" + line + "}\n")
+      if (updated === body) updated = "{\n" + line + "}\n"
+      runCmd(["bash", "-c", "mkdir -p " + shq(root.homeDir + "/.config/omarchy/extensions") +
+        " && printf '%s' " + shq(updated) + " > " + shq(menuFile)], null)
+    })
+  }
+
   // -------------------------------------------------------------------- IPC
   IpcHandler {
     target: root.pluginId
@@ -1164,6 +1204,7 @@ Item {
     runCmd(["bash", "-c", "mkdir -p " + shq(root.stateDir) + " " + shq(root.dataDir) + "; : > " + shq(root.requestFile)], function() {
       root.readCurrentSddm()
       root.readCurrentLock()
+      root.ensureLauncherEntries()
       // The menu no longer exposes a lock-provider switch: the repo lock is
       // always in charge so Lock Preview / Apply behave as advertised. Make
       // the takeover active (disables the native lock plugin) if needed.

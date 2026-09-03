@@ -78,6 +78,22 @@ cp -r mark.lock-themes ~/.config/omarchy/plugins/mark.lock-themes
 omarchy restart shell
 ```
 
+## Launcher entries (automatic)
+
+On first load the plugin registers itself, so neither this machine nor users
+installing it need to do anything manual:
+
+- **Omarchy menu row** — a `QyLock Oma` entry (searchable: `qylock`, `lock`,
+  `sddm`, `theme`) is added to
+  `~/.config/omarchy/extensions/omarchy-menu.jsonc` (only if the key is
+  missing; your existing entries are untouched). It summons the picker.
+- **Desktop entry** — `~/.local/share/applications/qylock-oma.desktop` makes
+  it appear in the launcher/Apps search, with the plugin's `preview.png` as
+  its icon.
+
+Both are written at user level, idempotently, at every shell start. Disable
+with `"autoEntries": false` in the plugin's `shell.json` entry.
+
 Validate the folder at any time:
 
 ```sh
