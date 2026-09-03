@@ -100,7 +100,7 @@ Item {
   // Exact fit: columns*tileGap so the four cells (incl. their right/side
   // gaps) never exceed the available width -> the 4th column is never clipped.
   property int tileWidth: Math.floor((cardWidth - root.padding * 2 - root.columns * root.tileGap) / root.columns)
-  property int tileHeight: tileWidth + Style.space(50)
+  property int tileHeight: tileWidth + Style.space(64)
 
   // ---------------------------------------------------------------- actions
   function shq(s) {
@@ -402,18 +402,25 @@ Item {
 
               Text {
                 width: parent.width
-                text: modelData.name
-                    + (modelData.risky ? " ⚠" : "")
-                    + (root.isCurrent(modelData.name) ? " - active"
-                       : root.isSelected(modelData.name) ? " - selected"
-                       : "")
-                color: root.isCurrent(modelData.name) ? root.foreground : root.foreground
+                text: modelData.name + (modelData.risky ? " ⚠" : "")
+                color: root.foreground
                 font.family: Style.font.family
                 font.pixelSize: Style.font.subtitle
                 font.bold: true
-                // Keep the name AND the - active/- selected suffix visible:
-                // elide the middle of long names, never the suffix.
-                elide: Text.ElideMiddle
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignHCenter
+              }
+
+              // State line: 'active' (applied, no highlight) or 'selected'
+              Text {
+                width: parent.width
+                visible: root.isCurrent(modelData.name) || root.isSelected(modelData.name)
+                text: root.isCurrent(modelData.name) ? "active" : "selected"
+                color: root.isSelected(modelData.name) && !root.isCurrent(modelData.name) ? root.accent : root.muted
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                font.bold: root.isSelected(modelData.name) && !root.isCurrent(modelData.name)
+                elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
               }
             }
