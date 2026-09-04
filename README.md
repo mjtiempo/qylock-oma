@@ -190,6 +190,22 @@ live-background renderer:
   set), but the static renderer cannot display video, so the desktop stays
   static. Install/enable `mark.live-background` to make video themes play.
 
+### Built-in Omarchy wallpapers
+
+The Background tab also lists every wallpaper Omarchy ships, scanned from
+the same folders the built-in background switcher (`omarchy background`)
+uses:
+
+- `/usr/share/omarchy/themes/*/backgrounds/` — each installed theme's
+  wallpaper set, listed as `<theme>-<file>` (e.g. `gruvbox-5-leaves`)
+- `~/.config/omarchy/backgrounds/` — your custom wallpapers (listed by
+  file name; videos here animate too)
+
+They appear **only in the Background tab** (they are not lock/SDDM themes)
+and apply like any theme (click, Apply). The scan runs at start and after
+each sync; a `backgroundDirs` array in the plugin's `shell.json`/`config.json`
+entry replaces the default folders with your own list of absolute paths.
+
 Notes:
 
 - The service verifies the background state link **and** the artwork file

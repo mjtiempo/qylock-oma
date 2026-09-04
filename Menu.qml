@@ -73,6 +73,10 @@ Item {
   property string lockMode: "themed"
   property double recoveredNativeAt: 0
   property var themeList: []
+  // Tab-filtered grid view: built-in wallpapers only make sense in the
+  // Background tab — the Lock & SDDM tab shows catalog themes only.
+  property var gridThemes: []
+  onTabChanged: root.recomputeGrid()
 
   // ---------------------------------------------------------------- styling
   property color surface: Color.menu.background
@@ -163,7 +167,16 @@ Item {
     if (!raw) return
     var arr = null
     try { arr = JSON.parse(raw) } catch (e) { return }
-    if (Array.isArray(arr)) root.themeList = arr
+    if (Array.isArray(arr)) {
+      root.themeList = arr
+      root.recomputeGrid()
+    }
+  }
+
+  function recomputeGrid() {
+    root.gridThemes = root.tab === "lock"
+      ? root.themeList.filter(function(e) { return !e.builtin })
+      : root.themeList
   }
 
   function refreshNow() {
@@ -367,7 +380,7 @@ Item {
             height: parent.height
             cellWidth: root.tileWidth + root.tileGap
             cellHeight: root.tileHeight + root.tileGap
-            model: root.themeList
+            model: root.gridThemes
             clip: true
             boundsBehavior: Flickable.StopAtBounds
 
@@ -385,7 +398,9 @@ Item {
 
             MouseArea {
               anchors.fill: parent
-              enabled: !root.busy && modelData.main
+              // Built-in wallpapers are selectable in the Background tab
+              // only (they are not lock/SDDM themes).
+              enabled: !root.busy && (root.tab === "background" || modelData.main)
               cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
               onClicked: root.selectTheme(modelData.name)
             }

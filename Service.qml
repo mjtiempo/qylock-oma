@@ -56,6 +56,13 @@ Item {
   property string repoBranch: ""
   property string lockThemeFile: homeDir + "/.config/qylock/theme"
   property string lockAppSubdir: "quickshell-lockscreen"
+  // Built-in background sources scanned into the picker's Background tab
+  // (same folders omarchy's own background switcher lists): every shipped
+  // Omarchy theme's backgrounds/ dir + the user's custom dir. Overridable
+  // via shell.json / config.json `backgroundDirs` (array of absolute paths;
+  // a provided value replaces the default sources).
+  property var backgroundDirs: []
+  readonly property string userBackgroundsRoot: homeDir + "/.config/omarchy/backgrounds"
   property bool autoSync: true
   // "native" = the Omarchy in-shell lock stays in charge (default);
   // "themed" = this plugin answers the "lock" IPC target and runs the
@@ -315,6 +322,77 @@ Item {
     })
   }
 
+  // Scans the Omarchy background folders and merges every wallpaper into
+  // the theme list as a built-in background entry (Background tab only):
+  // all shipped theme backgrounds + the user's custom dir — the same sources
+  // omarchy's own background switcher lists. Entries are plain files;
+  // applyBackground special-cases them (no theme.conf, no asset fetch).
+  // The scan runs at start and after each catalog sync; it is safe to re-run
+  // (existing entries are skipped by name).
+  function scanBuiltinBackgrounds() {
+    var shipped = "/usr/share/omarchy/themes"
+    var user = root.userBackgroundsRoot
+    var extra = root.backgroundDirs
+    // Shipped: every theme's backgrounds/ dir, prefixed with the theme
+    // name (files repeat across themes, e.g. omarchy.png x22).
+    // Custom: user dir contents (recursive) + extra backgroundDirs from
+    // config, prefixed "user".
+    var s = "shipped=" + shq(shipped) + "; user=" + shq(user) +
+      "; { find \"$shipped\" -maxdepth 2 -type d -name backgrounds 2>/dev/null | while read -r d; do t=$(basename \"$(dirname \"$d\")\"); find \"$d\" -maxdepth 1 -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.apng' \\) -printf '%p\\n' 2>/dev/null | while read -r f; do printf '%s\\t%s\\n' \"$t\" \"$f\"; done; done" +
+      "; [ -d \"$user\" ] && find \"$user\" -maxdepth 2 -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.apng' -o -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.mov' \\) -printf '%p\\n' 2>/dev/null | while read -r f; do printf '%s\\t%s\\n' user \"$f\"; done"
+    for (var e = 0; e < extra.length; e++) {
+      var d = String(extra[e])
+      s += "; [ -d " + shq(d) + " ] && find " + shq(d) + " -maxdepth 2 -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.apng' -o -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.mov' \\) -printf '%p\\n' 2>/dev/null | while read -r f; do printf '%s\\t%s\\n' user \"$f\"; done"
+    }
+    s += "; } | sort"
+    runCmd(["bash", "-c", s], function(code, out) {
+      var lines = String(out || "").split("\n")
+      var added = 0
+      for (var i = 0; i < lines.length; i++) {
+        var parts = lines[i].split("\t")
+        if (parts.length < 2) continue
+        var prefix = parts[0]
+        var f = parts[1]
+        if (!f || f.length === 0) continue
+        var base = f.split("/").pop()
+        if (!base) continue
+        var rawName = prefix === "user" ? base : prefix + "-" + base
+        var name = String(rawName).replace(/\.[^.]+$/, "")
+        if (!name) continue
+        if (root.findTheme(name)) continue   // never shadow a catalog theme
+        var lower = String(base).toLowerCase()
+        var video = /\.(mp4|webm|mkv|mov)$/.test(lower)
+        var anim = /\.(gif|apng)$/.test(lower)
+        root.themes.push({
+          name: name,
+          subpath: "",
+          main: false,
+          conf: false,
+          meta: false,
+          background: base,
+          kind: video ? "video" : "image",
+          color: "",
+          video: video,
+          collection: false,
+          collectionOf: "",
+          flattenedFrom: "",
+          risky: false,
+          path: f,
+          gif: anim ? f : "",
+          preview: f,
+          builtin: true
+        })
+        added += 1
+      }
+      if (added > 0) {
+        root.themes.sort(function(a, b) { return a.name.localeCompare(b.name) })
+        root.themeCount = root.themes.length
+        root.writeJson(root.themesFile, root.themes)
+        console.log("mark.lock-themes: +" + added + " built-in wallpapers in the Background tab")
+      }
+    })
+  }
+
   // ---------------------------------------------------------------- syncing
   function sync() {
     if (root.busy) return
@@ -359,6 +437,8 @@ Item {
       root.parseCatalog(function() {
         root.prepareAssetsBase(function(ok, note) {
           if (!ok) { root.fail(note); return }
+          // Include Omarchy's shipped wallpapers + custom dir in the picker.
+          root.scanBuiltinBackgrounds()
           if (!root.lockAppInstalled) {
             root.installLockAppInner(function(ok2, note2) {
               if (ok2) root.setDone("idle", "Synced " + root.themeCount + " themes (catalog). " + note2)
@@ -613,10 +693,18 @@ Item {
   }
 
   // ------------------------------------------------------- background apply
+  // Applies a theme's artwork to the Omarchy background: catalog themes
+  // resolve their background= from theme.conf after a lazy asset fetch;
+  // built-in wallpapers are plain files applied directly.
   function applyBackground(name) {
     var t = root.findTheme(name)
     if (!t) {
       root.fail("Unknown theme: " + name)
+      return
+    }
+    if (t.builtin) {
+      root.setBusy("applying-background", "Applying " + t.name + "…")
+      root.applyBackgroundFile(String(t.path || ""), t.name, t.video)
       return
     }
     root.setBusy("applying-background", "Applying " + t.name + " background…")
@@ -627,30 +715,38 @@ Item {
         "; bg=$(grep -E '^background=' \"$d/theme.conf\" 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' \r' | head -1)" +
         "; if [ -n \"$bg\" ] && [ -f \"$d/$bg\" ]; then printf '%s' \"$d/$bg\"; else exit 1; fi"], function(code2, out2) {
         if (code2 !== 0) { root.fail(t.name + " has no image background to apply."); return }
-        var bgPath = String(out2 || "").trim()
-        runCmd(["bash", "-c", "omarchy theme bg set " + shq(bgPath)], function(code3, out3, err3) {
-          if (code3 !== 0) {
-            root.fail("Background apply failed: " + String(err3 || out3).trim())
-            return
-          }
-          // The setter's exit code only proves the command ran — a video file
-          // that fails to RENDER still exits 0. Verify the state link actually
-          // resolves to the artwork and the file still exists.
-          runCmd(["bash", "-c",
-            "l=" + shq(root.homeDir + "/.local/state/omarchy/current/background") +
-            "; r=$(readlink -f \"$l\" 2>/dev/null || true)" +
-            "; if [ -n \"$r\" ] && [ -f \"$r\" ] && [ \"$r\" = " + shq(bgPath) + " ]; then echo CONFIRMED; else echo \"BAD:$r\"; fi"],
-            function(code4, out4) {
-              var verdict = String(out4 || "").trim()
-              var art = t.video ? "animated background" : "background"
-              if (code4 === 0 && verdict === "CONFIRMED") {
-                root.currentBg = t.name
-                root.setDone("idle", t.name + " " + art + " applied — the Omarchy lock screen and wallpaper now use its artwork.")
-              } else {
-                root.fail("Background apply failed: the background link does not resolve to \"" + t.name + "\"'s artwork (" + verdict + ").")
-              }
-            })
-        })
+        root.applyBackgroundFile(String(out2 || "").trim(), t.name, t.video)
+      })
+    })
+  }
+
+  // Sets the background state link to an existing artwork file and verifies
+  // the apply by readback: the setter's exit code only proves the command
+  // ran — a video file that fails to RENDER still exits 0, so the link must
+  // resolve to the file we intended.
+  function applyBackgroundFile(bgPath, label, isVideo) {
+    if (!bgPath) { root.fail(label + " has no background file to apply."); return }
+    runCmd(["bash", "-c", "[ -f " + shq(bgPath) + " ]"], function(code0) {
+      if (code0 !== 0) { root.fail(label + ": background file is missing: " + bgPath); return }
+      runCmd(["bash", "-c", "omarchy theme bg set " + shq(bgPath)], function(code3, out3, err3) {
+        if (code3 !== 0) {
+          root.fail("Background apply failed: " + String(err3 || out3).trim())
+          return
+        }
+        runCmd(["bash", "-c",
+          "l=" + shq(root.homeDir + "/.local/state/omarchy/current/background") +
+          "; r=$(readlink -f \"$l\" 2>/dev/null || true)" +
+          "; if [ -n \"$r\" ] && [ -f \"$r\" ] && [ \"$r\" = " + shq(bgPath) + " ]; then echo CONFIRMED; else echo \"BAD:$r\"; fi"],
+          function(code4, out4) {
+            var verdict = String(out4 || "").trim()
+            var art = isVideo ? "animated background" : "background"
+            if (code4 === 0 && verdict === "CONFIRMED") {
+              root.currentBg = label
+              root.setDone("idle", label + " " + art + " applied — the Omarchy lock screen and wallpaper now use its artwork.")
+            } else {
+              root.fail("Background apply failed: the background link does not resolve to \"" + label + "\"'s artwork (" + verdict + ").")
+            }
+          })
       })
     })
   }
@@ -683,6 +779,7 @@ Item {
         if (p.lockThemeFile) root.lockThemeFile = root.expandHome(String(p.lockThemeFile))
         if (p.lockAppSubdir) root.lockAppSubdir = String(p.lockAppSubdir)
         if (typeof p.autoSync === "boolean") root.autoSync = p.autoSync
+        if (p.backgroundDirs) root.backgroundDirs = Array.isArray(p.backgroundDirs) ? p.backgroundDirs.map(String) : [String(p.backgroundDirs)]
         if (p.lockMode === "themed" || p.lockMode === "native") {
           root.lockMode = String(p.lockMode)
           root.lockModeExplicit = true
@@ -716,6 +813,7 @@ Item {
         root.lockModeExplicit = true
       }
     }
+    if (cfg && cfg.backgroundDirs) root.backgroundDirs = Array.isArray(cfg.backgroundDirs) ? cfg.backgroundDirs.map(String) : [String(cfg.backgroundDirs)]
     if (cfg && typeof cfg.animatedBg === "boolean") {
       root.animatedBg = cfg.animatedBg
       root.animatedBgExplicit = true
@@ -1398,6 +1496,9 @@ Item {
         root.phase = "idle"
         root.message = "Auto-sync is disabled — press Update in the theme menu to download themes."
         root.writeStatus()
+        // No sync this boot: still refresh the list from the local catalog
+        // and merge the built-in wallpapers.
+        root.parseCatalog(function() { root.scanBuiltinBackgrounds() })
       }
     })
   }
