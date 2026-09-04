@@ -1,6 +1,6 @@
 # QyLock — Themed lock and Live Backgrounds for Omarchy
 
-An [Omarchy](https://omarchy.org/) shell plugin that gives you an interface for using custom Lock and SDDM Themes, Setting Backgrounds and experimental video backgrounds. 
+An [Omarchy](https://omarchy.org/) shell plugin that gives you an interface for using custom Lock and SDDM Themes, Setting Backgrounds and experimental video backgrounds.
 
 ## Install (from git)
 
@@ -191,46 +191,6 @@ shell.
 The installed lock app gets a small compatibility shim injected at install
 time (an inert `keyboard` object + `sddm.hostName`) so themes that use SDDM's
 keyboard context or gate login on `isQuickshell` behave correctly.
-
-### Safety net (v1.2+)
-
-A broken theme must never lock you out. The plugin guards the themed lock:
-
-- **theme-collection flattening** — `clockwork` is a folder of sub-themes
-  (`orbital`, `neo-orbital`, `tape`), each a complete theme one level deeper
-  than the app expects. The catalog promotes them to flat, first-class themes
-  (`clockwork-orbital`, `clockwork-neo-orbital`, `clockwork-tape`), and the
-  launch pre-flight re-links the lock app's `themes_link/<flat-name>` to the
-  real sub-theme directory so they lock and install like any other theme.
-- **known-broken badge** — themes known to hang the lock app (currently
-  `Genshin`: needs a manually-downloaded font and crashes on session-model
-  handling) are marked with ⚠ in the menu.
-- **watchdog** — kills the lock app only on a *confirmed* failure: the theme
-  failing to load (`FAILED to load theme`, from the lock app's own loader) or
-  the compositor probe repeatedly confirming the session never locked (a real
-  hang). It never kills a healthy lock on probe lag.
-- **safe fallback** — after a failure the lock relaunches once with a proven
-  stable theme (`girl-coffee`: bundled background + font, no videos). If the
-  fallback also fails, the session is left unlocked with an error message —
-  never a black screen.
-- **no stranded locks** — after an abnormal exit the plugin probes the
-  compositor lock state and re-locks with the safe theme if the session is
-  still held, so you can always unlock with your password.
-- **native restore (v1.30)** — if the safe fallback fails too, the lock app
-  itself is broken. The plugin releases the session lock, hands the `lock`
-  target back to the native Omarchy lock (persisted), and restarts the shell
-  — the lock is released *before* the restart, so no lock client is ever
-  orphaned. The picker shows a ⚠ notice with a ⚙ shortcut to re-enable the
-  themed lock.
-- **launch pre-flight (v1.29)** — before `lock.sh` runs, the theme's flat
-  `themes_link/<name>` path is re-linked (nested themes) and `Main.qml`
-  presence asserted; a missing/incomplete theme falls back to the safe theme
-  immediately instead of rendering a black lock surface. `lock.sh` also gets
-  an injected fail-fast (exit 3), and asset fetches retry 3×.
-- **orphan sweep (v1.29)** — a stale lock client from a previous shell is
-  unsupervised (the watchdog only sees its own child); on start such
-  processes are swept and an interactive lock is restored if the session is
-  still held.
 
 ### Emergency manual recovery
 
