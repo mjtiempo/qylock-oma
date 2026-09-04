@@ -248,21 +248,6 @@ Item {
       onClicked: root.close()
     }
 
-    Item {
-      id: keyCatcher
-      anchors.fill: parent
-      focus: true
-      Keys.priority: Keys.BeforeItem
-      Keys.onPressed: function(event) {
-        if (event.key === Qt.Key_Escape) {
-          if (root.providerPanelVisible) root.providerPanelVisible = false
-          else if (root.searchText.length > 0) root.searchText = ""
-          else root.close()
-          event.accepted = true
-        }
-      }
-    }
-
     Rectangle {
       id: card
       width: root.cardWidth
@@ -274,6 +259,23 @@ Item {
       anchors.horizontalCenter: parent.horizontalCenter
       y: Math.max(Style.gapsOut, Math.round((panel.height - height) / 2))
       clip: true
+      // Escape handling lives on the card itself: Qt Quick delivers key
+      // events along the activeFocus chain, so a SIBLING key catcher goes
+      // deaf the moment focus lands anywhere inside the card (search field,
+      // buttons, scrollbar) and Escape stops closing the menu. With
+      // Keys.BeforeItem here — an ancestor of every focusable descendant —
+      // Escape fires first no matter what holds focus (same pattern as the
+      // shell's qs.Ui.PanelKeyCatcher).
+      focus: true
+      Keys.priority: Keys.BeforeItem
+      Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Escape) {
+          if (root.providerPanelVisible) root.providerPanelVisible = false
+          else if (root.searchText.length > 0) root.searchText = ""
+          else root.close()
+          event.accepted = true
+        }
+      }
 
       // Swallow clicks on non-interactive card areas (title, gaps) so they
       // don't fall through to the scrim and close the menu.
@@ -387,7 +389,7 @@ Item {
             clip: true
             onTextChanged: root.searchText = text
             Keys.onPressed: function(event) {
-              if (event.key === Qt.Key_Escape) {
+              if (event.key === Qt.Key_Escape && root.searchText.length > 0) {
                 root.searchText = ""
                 event.accepted = true
               }
