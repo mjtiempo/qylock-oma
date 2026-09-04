@@ -589,21 +589,39 @@ Item {
     })
   }
 
-  // Fetches one theme's assets (blobs for its sparse path) on demand.
+  // Fetches one theme's assets (blobs for its sparse path) on demand, with
+  // retries — the blob checkout can fail transiently (network), and a theme
+  // missing at lock time is a black lock surface, not a retry.
   function ensureThemeAssets(t, cb) {
     if (!t || !t.subpath) { cb(false, "Unknown theme"); return }
     if (!root.repoCloned) { cb(false, "Catalog not synced yet"); return }
+    root.ensureThemeAssetsInner(t, 0, cb)
+  }
+
+  function ensureThemeAssetsInner(t, attempt, cb) {
     var sub = String(t.subpath)
+    var flat = String(t.name).replace(/[^\w.-]/g, "_")
     runCmd(["bash", "-c",
-      "dir=" + shq(root.assetsDir) + "; sub=" + shq(sub) +
-      "; if [ -f \"$dir/themes/$sub/Main.qml\" ]; then echo HAVE; exit 0; fi" +
+      "dir=" + shq(root.assetsDir) + "; sub=" + shq(sub) + "; flat=" + shq(flat) +
+      // Nested sub-themes (clockwork/ -> clockwork-orbital) are addressed by
+      // their flat name, and the flat link is otherwise only made at install
+      // time. A theme fetched later would leave lock.sh pointing at a missing
+      // path -> black lock surface; refresh the link on every successful fetch.
+      "; mkln() { [ \"$sub\" = \"$flat\" ] || ln -sfn \"$dir/themes/$sub\" \"$dir/themes/$flat\" 2>/dev/null || true; }" +
+      "; if [ -f \"$dir/themes/$sub/Main.qml\" ]; then mkln; echo HAVE; exit 0; fi" +
       "; git -C \"$dir\" sparse-checkout add --no-cone themes/\"$sub\" 2>/dev/null" +
       " || git -C \"$dir\" sparse-checkout add themes/\"$sub\" 2>/dev/null" +
       " || git -C \"$dir\" sparse-checkout set --no-cone themes/\"$sub\" quickshell-lockscreen themes/girl-coffee 2>/dev/null || true" +
       "; git -C \"$dir\" checkout --quiet 2>/dev/null || { echo FETCH_FAIL; exit 1; }" +
-      "; [ -f \"$dir/themes/$sub/Main.qml\" ] && echo HAVE || echo FETCH_FAIL"], function(code, out) {
-      if (String(out || "").indexOf("HAVE") === 0) cb(true, "")
-      else cb(false, "Could not fetch assets for \"" + t.name + "\"")
+      "; if [ -f \"$dir/themes/$sub/Main.qml\" ]; then mkln; echo HAVE; else echo FETCH_FAIL; fi"], function(code, out) {
+      if (String(out || "").indexOf("HAVE") === 0) { cb(true, ""); return }
+      if (attempt < 2) {
+        runCmd(["bash", "-c", "sleep 3"], function() {
+          root.ensureThemeAssetsInner(t, attempt + 1, cb)
+        })
+        return
+      }
+      cb(false, "Could not fetch assets for \"" + t.name + "\" (after " + (attempt + 1) + " attempts)")
     })
   }
 
@@ -643,6 +661,12 @@ Item {
       // hostName, so those themes could NEVER authenticate (Enter did
       // nothing). Provide hostName so isQuickshell is false and login works.
       "; if ! grep -q 'hostName' \"$dst/shim/SddmShim.qml\" 2>/dev/null; then perl -0pi -e 's/property var sddm: QtObject \{/property var sddm: QtObject {\\n        property string hostName: \x22localhost\x22/' \"$dst/shim/SddmShim.qml\"; fi" +
+      // Fail fast when the theme is missing: never lock a black surface.
+      // lock.sh exits 3 and the watchdog falls back to the safe theme.
+      // (perl: `/m` so the slurped `^exec quickshell` matches its own line,
+      // and `\$` so the replacement keeps shell vars literal — a bare `$`
+      // would be interpolated by perl as an empty variable.)
+      "; if ! grep -q 'refusing black lock' \"$dst/lock.sh\" 2>/dev/null; then perl -0pi -e 's|^exec quickshell.*|if [ ! -f \"\\$QS_THEME_PATH/Main.qml\" ]; then\\n echo \"lock.sh: theme missing - refusing black lock\" >\\&2\\n exit 3\\nfi\\nexec quickshell -p \"\\$DIR/lock_shell.qml\"|m' \"$dst/lock.sh\"; fi" +
       "; chmod +x \"$dst/lock.sh\" 2>/dev/null || true" +
       "; echo OK"], function(code, out, err) {
       if (code === 0) {
@@ -1173,8 +1197,36 @@ Item {
     return theme
   }
 
-  // Starts the themed lock now. Returns a status string for IPC callers.
+  // Starts the themed lock now — after a pre-flight readiness check. A theme
+  // that is missing or incomplete must never reach lock.sh (a black lock
+  // surface): the flat themes_link/<name> path is re-linked if needed, then
+  // Main.qml presence is asserted; on failure the safe fallback engages
+  // instead of a dead lock. Returns a status string for IPC callers.
   function launchLockProc(theme) {
+    if (root.lockLaunching) return "ok"
+    root.lockLaunching = true
+    var t = root.findTheme(theme)
+    var sub = t ? String(t.subpath || theme) : theme
+    runCmd(["bash", "-c",
+      "f=" + shq(root.lockAppDir + "/themes_link/" + theme) +
+      "; src=" + shq(root.assetsDir + "/themes/" + sub) +
+      "; [ -d \"$f\" ] || { [ -d \"$src\" ] && ln -sfn \"$src\" \"$f\"; }" +
+      "; if [ -d \"$f\" ] && [ -f \"$f/Main.qml\" ]; then echo READY; else echo NOT_READY; fi"],
+      function(code, out) {
+        root.lockLaunching = false
+        if (String(out || "").indexOf("READY") !== 0) {
+          root.fail("\"" + theme + "\" could not be locked: its files are missing or incomplete (themes_link/" + theme + ").")
+          if (theme !== root.safeLockTheme) root.startSafeFallbackLock()
+          return
+        }
+        root.launchLockProcInner(theme)
+      })
+    return "ok"
+  }
+
+  property bool lockLaunching: false
+
+  function launchLockProcInner(theme) {
     lockProc.command = ["bash", "-c", "exec " + shq(root.lockAppDir + "/lock.sh") + " " + shq(theme)]
     root.themedLockActive = true
     root.sessionSecure = false
@@ -1308,6 +1360,35 @@ Item {
     }
   }
 
+  // A lock client that survived a previous shell is unsupervised: the
+  // watchdog only monitors its own lockProc child, so a broken orphan would
+  // hold the session lock (black surface) until manual rescue. Sweep stale
+  // lock_shell.qml processes on start; if the session is still locked,
+  // restore an interactive lock UI (the launch pre-flight picks the current
+  // theme or falls back to the safe theme).
+  function sweepStrandedLocks() {
+    runCmd(["bash", "-c", "pgrep -f 'lock_shell.qml' >/dev/null 2>&1 && echo FOUND || echo CLEAN"], function(code, out) {
+      if (String(out || "").indexOf("FOUND") !== 0) return
+      console.log("mark.lock-themes: sweeping stale lock client from a previous shell")
+      runCmd(["bash", "-c", "pkill -f 'lock_shell.qml' 2>/dev/null || true"], function() {
+        runCmd(["omarchy-hyprland-session-locked"], function(code2, out2) {
+          if (code2 !== 0) return
+          root.lockFallbacksLeft = 1
+          if (root.themedLock() === "no-lock-app") {
+            // The lock app (re)installs during this very start; the sweep can
+            // run ahead of that chain — retry once after it lands.
+            Qt.callLater(function() {
+              if (!root.themedLockActive) {
+                root.lockFallbacksLeft = 1
+                root.themedLock()
+              }
+            }, 12000)
+          }
+        })
+      })
+    })
+  }
+
   // Fetches a theme's assets on demand (also useful for prefetching).
   function fetchTheme(name) {
     var t = root.findTheme(name)
@@ -1428,6 +1509,7 @@ Item {
   Component.onCompleted: {
     root.loadConfig()
     root.detectLiveRenderer()
+    root.sweepStrandedLocks()
     runCmd(["bash", "-c", "mkdir -p " + shq(root.stateDir) + " " + shq(root.dataDir) + "; : > " + shq(root.requestFile)], function() {
       root.readCurrentSddm()
       root.readCurrentLock()

@@ -238,6 +238,15 @@ A broken theme must never lock you out. The plugin guards the themed lock:
 - **no stranded locks** — after an abnormal exit the plugin probes the
   compositor lock state and re-locks with the safe theme if the session is
   still held, so you can always unlock with your password.
+- **launch pre-flight (v1.29)** — before `lock.sh` runs, the theme's flat
+  `themes_link/<name>` path is re-linked (nested themes) and `Main.qml`
+  presence asserted; a missing/incomplete theme falls back to the safe theme
+  immediately instead of rendering a black lock surface. `lock.sh` also gets
+  an injected fail-fast (exit 3), and asset fetches retry 3×.
+- **orphan sweep (v1.29)** — a stale lock client from a previous shell is
+  unsupervised (the watchdog only sees its own child); on start such
+  processes are swept and an interactive lock is restored if the session is
+  still held.
 
 ### Emergency manual recovery
 
