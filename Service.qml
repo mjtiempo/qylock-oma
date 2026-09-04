@@ -786,11 +786,19 @@ Item {
     // dialog shows the action's clean label ("Password required to Apply
     // SDDM theme") instead of the whole install script. First use
     // bootstraps the helper + policy into /usr/share (one raw prompt);
-    // auth_admin_keep then remembers the authorization.
+    // auth_admin_keep then remembers the authorization. The installed
+    // helper is byte-compared against the bundled one on every apply, so
+    // plugin updates that harden the helper re-bootstrap it (one raw
+    // prompt) instead of silently running a stale privileged script.
     var helper = "/usr/share/qylock-oma/install-sddm.sh"
     var policyPath = "/usr/share/polkit-1/actions/qylock-oma.policy"
+    var bundledHelper = root.pluginDir + "/tools/install-sddm.sh"
+    var bundledPolicy = root.pluginDir + "/tools/qylock-oma.policy"
     runCmd(["bash", "-c",
-      "[ -x " + shq(helper) + " ] && [ -f " + shq(policyPath) + " ] && echo READY || echo SETUP"], function(code0, out0) {
+      "[ -x " + shq(helper) + " ] && [ -f " + shq(policyPath) + " ]" +
+      " && [ \"$(sha256sum " + shq(helper) + " | cut -d' ' -f1)\" = \"$(sha256sum " + shq(bundledHelper) + " | cut -d' ' -f1)\" ]" +
+      " && [ \"$(sha256sum " + shq(policyPath) + " | cut -d' ' -f1)\" = \"$(sha256sum " + shq(bundledPolicy) + " | cut -d' ' -f1)\" ]" +
+      " && echo READY || echo SETUP"], function(code0, out0) {
       var finish = function(code, out, err) {
         if (code === 0) {
           root.currentSddm = name
@@ -804,8 +812,8 @@ Item {
         return
       }
       runCmd(["pkexec", "sh", "-c",
-        "mkdir -p /usr/share/qylock-oma && cp " + shq(root.pluginDir + "/tools/install-sddm.sh") + " " + shq(helper) +
-        " && cp " + shq(root.pluginDir + "/tools/qylock-oma.policy") + " " + shq(policyPath) +
+        "mkdir -p /usr/share/qylock-oma && cp " + shq(bundledHelper) + " " + shq(helper) +
+        " && cp " + shq(bundledPolicy) + " " + shq(policyPath) +
         " && chmod 755 " + shq(helper) +
         " && exec " + shq(helper) + " " + shq(name) + " " + shq(t.path)], finish)
     })
