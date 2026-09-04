@@ -175,19 +175,20 @@ The Background tab can play **live wallpapers**, not just static images:
 Rendering lives in the **live-background renderer** plugin
 (`mark.live-background`, a local Omarchy plugin that replaces the static
 `omarchy.background` renderer). When it is installed and enabled
-(`omarchy.background` disabled in `shell.json`), animated backgrounds
-**auto-enable**; otherwise video themes are refused with a clear message
-(the safe static-only default is untouched).
+(`omarchy.background` disabled in `shell.json`), video themes play on the
+wallpaper; without it they are still applied, just not animated.
 
-The Background tab toggle **Animated backgrounds** forces it either way
-(persisted in `~/.local/state/omarchy/mark.lock-themes/config.json`; a
-`shell.json` plugin entry `"animatedBg": true|false` works too):
+Animated backgrounds are **always enabled** — video themes apply like any
+image theme (there is no toggle; an `"animatedBg"` entry in an older
+`shell.json`/`config.json` is ignored). What actually *plays* them is the
+live-background renderer:
 
-| Mode | Video theme applied as |
-| --- | --- |
-| On (renderer installed) | looping muted video wallpaper |
-| On (no renderer) | same as off — the static renderer cannot display it |
-| Off | refused: video theme has no image background |
+- **Renderer installed** — the video loops muted, cropped to fill on the
+  wallpaper. The Background tab confirms the state (or notes the renderer
+  is missing).
+- **No renderer** — the theme is still applied (state link + artwork are
+  set), but the static renderer cannot display video, so the desktop stays
+  static. Install/enable `mark.live-background` to make video themes play.
 
 Notes:
 

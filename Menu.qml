@@ -67,7 +67,7 @@ Item {
   property string currentSddm: ""
   property string currentLock: ""
   property string currentBg: ""
-  property bool animatedBg: false
+  property bool liveRendererPresent: false
   property bool lockAppInstalled: false
   property bool themedLockActive: false
   property string lockMode: "themed"
@@ -152,7 +152,7 @@ Item {
     if (typeof j.currentSddm === "string") root.currentSddm = j.currentSddm
     if (typeof j.currentLock === "string") root.currentLock = j.currentLock
     if (typeof j.currentBg === "string") root.currentBg = j.currentBg
-    if (typeof j.animatedBg === "boolean") root.animatedBg = j.animatedBg
+    if (typeof j.liveRendererPresent === "boolean") root.liveRendererPresent = j.liveRendererPresent
     if (typeof j.lockAppInstalled === "boolean") root.lockAppInstalled = j.lockAppInstalled
     if (typeof j.themedLockActive === "boolean") root.themedLockActive = j.themedLockActive
     if (typeof j.lockMode === "string") root.lockMode = j.lockMode
@@ -340,30 +340,19 @@ Item {
           }
         }
 
-        // Animated-background toggle (Background tab): video themes play as
-        // live wallpaper when on; off keeps the safe static-only behavior.
-        Row {
+        // Animated backgrounds are always on (Background tab): video themes
+        // apply like image themes. The live renderer is what actually plays
+        // them — a note explains when it is missing.
+        Text {
           width: parent.width
           visible: root.tab === "background"
-          spacing: Style.space(8)
-
-          Text {
-            width: parent.width - Style.space(140)
-            text: "Animated backgrounds (video themes)"
-            color: root.muted
-            font.family: Style.font.family
-            font.pixelSize: Style.font.body
-            elide: Text.ElideRight
-          }
-
-          Button {
-            id: animatedBgBtn
-            width: Style.space(130)
-            text: root.animatedBg ? "On" : "Off"
-            accent: root.accent
-            selected: root.animatedBg
-            onClicked: root.request("setAnimatedBg", root.animatedBg ? "false" : "true")
-          }
+          text: root.liveRendererPresent
+            ? "Animated backgrounds: on — video and image themes both work."
+            : "⚠ Video themes are applied but won't animate: the live-background renderer is not active."
+          color: root.liveRendererPresent ? root.muted : Color.urgent
+          font.family: Style.font.family
+          font.pixelSize: Style.font.body
+          wrapMode: Text.WordWrap
         }
 
         // -------------------------------------------------------------- grid
@@ -583,7 +572,7 @@ Item {
           width: parent.width
           text: (root.tab === "lock"
             ? "Apply sets the lock theme + SDDM (Polkit at next login); Preview locks now with it. "
-            : "Apply changes the background instantly; video themes animate when Animated backgrounds is on. ")
+            : "Apply changes the background instantly; video themes animate too. ")
             + "Escape closes."
           color: root.muted
           font.family: Style.font.family

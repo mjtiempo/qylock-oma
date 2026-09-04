@@ -67,12 +67,13 @@ Item {
   // Automatically register launcher entries on first load: an Omarchy menu
   // row (extensions/omarchy-menu.jsonc) + a desktop entry. Idempotent.
   property bool autoEntries: true
-  // Animated backgrounds: video themes (background=.mp4/.webm/.mkv/.mov) are
-  // applied to the Omarchy background instead of refused when this is on.
-  // Auto-enabled when the live-background renderer (mark.live-background) is
-  // registered and omarchy.background is disabled; config.json / shell.json
-  // `animatedBg` always wins over the auto state.
-  property bool animatedBg: false
+  // Animated backgrounds are ALWAYS enabled: video themes
+  // (background=.mp4/.webm/.mkv/.mov) apply like image themes. The live
+  // renderer is what plays them — without it they are still applied, just
+  // not animated. The flag stays in state/config for status reporting and
+  // backward compat with config.json written by older versions (nothing
+  // gates on it anymore).
+  property bool animatedBg: true
   property bool animatedBgExplicit: false
   // Explicit lockMode from shell.json / config.json — respected at startup
   // (see the comment on lockMode). Without it the themed lock auto-activates.
@@ -616,10 +617,6 @@ Item {
     var t = root.findTheme(name)
     if (!t) {
       root.fail("Unknown theme: " + name)
-      return
-    }
-    if (t.video && !root.animatedBg) {
-      root.fail(t.name + " is a video theme — animated backgrounds are off (enable them in the Background tab).")
       return
     }
     root.setBusy("applying-background", "Applying " + t.name + " background…")
