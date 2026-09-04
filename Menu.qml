@@ -39,6 +39,9 @@ Item {
   property string tab: "lock"
   // ⚙ lock-provider panel (repo themed lock vs native Omarchy lock).
   property bool providerPanelVisible: false
+  // Grid name search (both tabs) — filters as you type.
+  property string searchText: ""
+  onSearchTextChanged: root.recomputeGrid()
 
   function open(payloadJson) {
     root.opened = true
@@ -48,6 +51,7 @@ Item {
   function close() {
     root.opened = false
     root.providerPanelVisible = false
+    root.searchText = ""
   }
 
   function refresh() {
@@ -94,7 +98,7 @@ Item {
   // margins (content anchors center, so no bottom-heavy black area).
   // Reserved header/footer heights matched to their actual content so the
   // card hugs the UI with no extra blank bands top or bottom.
-  readonly property int headerBlock: Style.space(104)
+  readonly property int headerBlock: Style.space(160)
   readonly property int footerBlock: Style.space(40)
   readonly property int tileGap: Style.space(14)
   readonly property int rowsVisible: 3
@@ -167,16 +171,23 @@ Item {
     if (!raw) return
     var arr = null
     try { arr = JSON.parse(raw) } catch (e) { return }
-    if (Array.isArray(arr)) {
-      root.themeList = arr
-      root.recomputeGrid()
-    }
+    if (!Array.isArray(arr)) return
+    // Same content as the current list? Keep the existing array so the
+    // GridView (scroll position, selection) is untouched by the 2s poll.
+    if (JSON.stringify(root.themeList) === JSON.stringify(arr)) return
+    root.themeList = arr
+    root.recomputeGrid()
   }
 
   function recomputeGrid() {
-    root.gridThemes = root.tab === "lock"
+    var q = String(root.searchText || "").trim().toLowerCase()
+    var base = root.tab === "lock"
       ? root.themeList.filter(function(e) { return !e.builtin })
       : root.themeList
+    if (!q) { root.gridThemes = base; return }
+    root.gridThemes = base.filter(function(e) {
+      return String(e.name || "").toLowerCase().indexOf(q) >= 0
+    })
   }
 
   function refreshNow() {
@@ -245,6 +256,7 @@ Item {
       Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape) {
           if (root.providerPanelVisible) root.providerPanelVisible = false
+          else if (root.searchText.length > 0) root.searchText = ""
           else root.close()
           event.accepted = true
         }
@@ -350,6 +362,68 @@ Item {
             accent: root.accent
             selected: root.tab === "background"
             onClicked: root.tab = "background"
+          }
+        }
+
+        // Name search: filters the grid (both tabs) as you type.
+        Rectangle {
+          width: parent.width
+          height: Style.space(44)
+          radius: Style.cornerRadius - 2
+          color: Util.alpha(root.surface, 0.6)
+          border.width: 1
+          border.color: root.cardBorder
+
+          TextInput {
+            id: searchInput
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(12)
+            anchors.rightMargin: Style.space(36)
+            verticalAlignment: TextInput.AlignVCenter
+            text: root.searchText
+            color: root.foreground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+            clip: true
+            onTextChanged: root.searchText = text
+            Keys.onPressed: function(event) {
+              if (event.key === Qt.Key_Escape) {
+                root.searchText = ""
+                event.accepted = true
+              }
+            }
+          }
+
+          Text {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(12)
+            anchors.rightMargin: Style.space(36)
+            visible: root.searchText.length === 0
+            text: "Search themes and wallpapers…"
+            color: root.muted
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+          }
+
+          Text {
+            anchors.right: parent.right
+            anchors.rightMargin: Style.space(10)
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.searchText.length > 0
+            text: "✕"
+            color: root.muted
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+            font.bold: true
+            MouseArea {
+              anchors.fill: parent
+              onClicked: {
+                root.searchText = ""
+                searchInput.focus = true
+              }
+            }
           }
         }
 

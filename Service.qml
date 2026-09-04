@@ -63,6 +63,8 @@ Item {
   // a provided value replaces the default sources).
   property var backgroundDirs: []
   readonly property string userBackgroundsRoot: homeDir + "/.config/omarchy/backgrounds"
+  // Drop-in folder for user wallpapers (created at startup, auto-rescanned).
+  readonly property string pictureBackgroundsRoot: homeDir + "/Pictures/Backgrounds"
   property bool autoSync: true
   // "native" = the Omarchy in-shell lock stays in charge (default);
   // "themed" = this plugin answers the "lock" IPC target and runs the
@@ -324,27 +326,24 @@ Item {
 
   // Scans the Omarchy background folders and merges every wallpaper into
   // the theme list as a built-in background entry (Background tab only):
-  // all shipped theme backgrounds + the user's custom dir — the same sources
-  // omarchy's own background switcher lists. Entries are plain files;
+  // all shipped theme backgrounds + the custom dirs (omarchy's own
+  // ~/.config/omarchy/backgrounds and the drop-in ~/Pictures/Backgrounds,
+  // plus any configured backgroundDirs). Entries are plain files;
   // applyBackground special-cases them (no theme.conf, no asset fetch).
-  // The scan runs at start and after each catalog sync; it is safe to re-run
-  // (existing entries are skipped by name).
+  // The scan is safe to re-run (existing entries are skipped by name) and
+  // only rewrites themes.json when new files are found.
   function scanBuiltinBackgrounds() {
     var shipped = "/usr/share/omarchy/themes"
-    var user = root.userBackgroundsRoot
-    var extra = root.backgroundDirs
+    var custom = [root.userBackgroundsRoot, root.pictureBackgroundsRoot].concat(root.backgroundDirs)
     // Shipped: every theme's backgrounds/ dir, prefixed with the theme
     // name (files repeat across themes, e.g. omarchy.png x22).
-    // Custom: user dir contents (recursive) + extra backgroundDirs from
-    // config, prefixed "user".
-    var s = "shipped=" + shq(shipped) + "; user=" + shq(user) +
+    // Custom: drop-in dirs, listed by bare file name (prefix "user").
+    var s = "shipped=" + shq(shipped) +
       "; { find \"$shipped\" -maxdepth 2 -type d -name backgrounds 2>/dev/null | while read -r d; do t=$(basename \"$(dirname \"$d\")\"); find \"$d\" -maxdepth 1 -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.apng' \\) -printf '%p\\n' 2>/dev/null | while read -r f; do printf '%s\\t%s\\n' \"$t\" \"$f\"; done; done" +
-      "; [ -d \"$user\" ] && find \"$user\" -maxdepth 2 -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.apng' -o -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.mov' \\) -printf '%p\\n' 2>/dev/null | while read -r f; do printf '%s\\t%s\\n' user \"$f\"; done"
-    for (var e = 0; e < extra.length; e++) {
-      var d = String(extra[e])
-      s += "; [ -d " + shq(d) + " ] && find " + shq(d) + " -maxdepth 2 -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.apng' -o -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.mov' \\) -printf '%p\\n' 2>/dev/null | while read -r f; do printf '%s\\t%s\\n' user \"$f\"; done"
-    }
-    s += "; } | sort"
+      "; for src in"
+    for (var e = 0; e < custom.length; e++) s += " " + shq(String(custom[e]))
+    s += "; do [ -d \"$src\" ] && find \"$src\" -maxdepth 2 -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.apng' -o -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.mov' \\) -printf '%p\\n' 2>/dev/null | while read -r f; do printf '%s\\t%s\\n' user \"$f\"; done; done" +
+      "; } | sort"
     runCmd(["bash", "-c", s], function(code, out) {
       var lines = String(out || "").split("\n")
       var added = 0
@@ -391,6 +390,18 @@ Item {
         console.log("mark.lock-themes: +" + added + " built-in wallpapers in the Background tab")
       }
     })
+  }
+
+  // Drop-in wallpapers: periodic rescan of the built-in background folders
+  // (~/Pictures/Backgrounds, ~/.config/omarchy/backgrounds, shipped themes)
+  // so a file added by the user appears in the picker without a restart.
+  // The scan only rewrites themes.json when NEW files are found, so the
+  // menu never churns.
+  Timer {
+    id: wallpaperRescanTimer
+    interval: 30000
+    repeat: true
+    onTriggered: root.scanBuiltinBackgrounds()
   }
 
   // ---------------------------------------------------------------- syncing
@@ -1472,7 +1483,7 @@ Item {
     root.loadConfig()
     root.detectLiveRenderer()
     root.sweepStrandedLocks()
-    runCmd(["bash", "-c", "mkdir -p " + shq(root.stateDir) + " " + shq(root.dataDir) + "; : > " + shq(root.requestFile)], function() {
+    runCmd(["bash", "-c", "mkdir -p " + shq(root.stateDir) + " " + shq(root.dataDir) + " " + shq(root.pictureBackgroundsRoot) + "; : > " + shq(root.requestFile)], function() {
       root.readCurrentSddm()
       root.readCurrentLock()
       root.ensureLauncherEntries()

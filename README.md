@@ -143,6 +143,9 @@ The picker is a square theme grid with two tabs:
   themed lock and the native Omarchy lock. The choice persists; your themes
   stay installed either way. A crash that breaks the themed lock switches
   back to native automatically (see Safety net).
+
+The **search box** above the grid filters by name as you type (both tabs;
+`Escape` or ✕ clears it).
 - **Background** — click a card, then **Apply** to use its artwork as the
   Omarchy background (lock screen + wallpaper).
 
@@ -192,19 +195,22 @@ live-background renderer:
 
 ### Built-in Omarchy wallpapers
 
-The Background tab also lists every wallpaper Omarchy ships, scanned from
-the same folders the built-in background switcher (`omarchy background`)
-uses:
+The Background tab also lists every wallpaper Omarchy ships plus your own,
+scanned from the same folders the built-in background switcher
+(`omarchy background`) uses:
 
 - `/usr/share/omarchy/themes/*/backgrounds/` — each installed theme's
   wallpaper set, listed as `<theme>-<file>` (e.g. `gruvbox-5-leaves`)
-- `~/.config/omarchy/backgrounds/` — your custom wallpapers (listed by
-  file name; videos here animate too)
+- `~/Pictures/Backgrounds/` — **drop-in folder**: put any image here and
+  it appears in the picker within ~30 seconds (no restart); GIFs/APNGs and
+  videos animate too. The folder is created automatically.
+- `~/.config/omarchy/backgrounds/` — the custom folder omarchy's own
+  switcher uses (listed by file name)
 
 They appear **only in the Background tab** (they are not lock/SDDM themes)
-and apply like any theme (click, Apply). The scan runs at start and after
-each sync; a `backgroundDirs` array in the plugin's `shell.json`/`config.json`
-entry replaces the default folders with your own list of absolute paths.
+and apply like any theme (click, Apply). A `backgroundDirs` array in the
+plugin's `shell.json`/`config.json` entry replaces the default folders with
+your own list of absolute paths.
 
 Notes:
 
