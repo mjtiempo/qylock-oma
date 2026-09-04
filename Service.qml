@@ -881,12 +881,18 @@ Item {
   // "background" IPC target when omarchy.background is disabled in shell.json.
   // Detect that pairing so animated backgrounds flip on automatically; an
   // explicit animatedBg config always wins.
+  // The built-in background renderer (background/Background.qml) owns the
+  // "background" IPC target whenever omarchy.background is disabled — a
+  // second live handler for one target would corrupt Quickshell's IPC
+  // registry, so takeover requires the static renderer to be off. "Present"
+  // therefore means: omarchy.background is disabled (we auto-disable it at
+  // startup, see Component.onCompleted) and the renderer is what answers
+  // background ops.
   function detectLiveRenderer() {
     runCmd(["bash", "-c",
       "f=" + shq(root.homeDir + "/.config/omarchy/shell.json") +
       "; if [ -f \"$f\" ]" +
       " && jq -e '(.disabledPlugins // []) | index(\"omarchy.background\") != null' \"$f\" >/dev/null 2>&1" +
-      " && jq -e '([.plugins[]?.id] | index(\"mark.live-background\")) != null' \"$f\" >/dev/null 2>&1" +
       "; then echo yes; else echo no; fi"], function(code, out) {
       var present = String(out || "").indexOf("yes") === 0
       var changed = present !== root.liveRendererPresent
@@ -896,6 +902,15 @@ Item {
         root.writeStatus()
       }
     })
+  }
+
+  // Built-in background renderer: active only while omarchy.background is
+  // disabled (IPC target exclusivity). Loaded as the service's child so
+  // image/GIF/video wallpapers come from the same plugin.
+  Loader {
+    id: bgRenderer
+    source: "background/Background.qml"
+    active: root.liveRendererPresent
   }
 
   // Menu toggle: persists animatedBg to config.json and applies immediately.
@@ -1549,6 +1564,15 @@ Item {
   // ---------------------------------------------------------------- startup
   Component.onCompleted: {
     root.loadConfig()
+    // Auto-disable the static omarchy.background renderer so the built-in
+    // background/Background.qml owns the "background" IPC target (videos
+    // live out of the box; mirrors the lock takeover). detectLiveRenderer
+    // then flips liveRendererPresent and activates the renderer.
+    runCmd(["bash", "-c",
+      "f=" + shq(root.homeDir + "/.config/omarchy/shell.json") +
+      "; if [ -f \"$f\" ]" +
+      " && ! jq -e '(.disabledPlugins // []) | index(\"omarchy.background\") != null' \"$f\" >/dev/null 2>&1" +
+      "; then timeout 5 omarchy-shell shell setPluginEnabled omarchy.background false >/dev/null 2>&1 || true; fi"], null)
     root.detectLiveRenderer()
     root.sweepStrandedLocks()
     runCmd(["bash", "-c", "mkdir -p " + shq(root.stateDir) + " " + shq(root.dataDir) + " " + shq(root.pictureBackgroundsRoot) + "; : > " + shq(root.requestFile)], function() {
