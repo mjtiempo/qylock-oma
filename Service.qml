@@ -346,6 +346,15 @@ Item {
       "; } | sort"
     runCmd(["bash", "-c", s], function(code, out) {
       var lines = String(out || "").split("\n")
+      // Every file currently on disk (for removal detection — the drop-in
+      // folder owns its list, so deleting a file drops its entry too).
+      var found = {}
+      for (var i = 0; i < lines.length; i++) {
+        var parts = lines[i].split("\t")
+        if (parts.length < 2) continue
+        var f = parts[1]
+        if (f && f.length > 0) found[f] = true
+      }
       var added = 0
       for (var i = 0; i < lines.length; i++) {
         var parts = lines[i].split("\t")
@@ -383,11 +392,14 @@ Item {
         })
         added += 1
       }
-      if (added > 0) {
+      var kept = root.themes.filter(function(e) { return !e.builtin || found[e.path] })
+      var removedCount = root.themes.length - kept.length
+      if (removedCount > 0) root.themes = kept
+      if (added > 0 || removedCount > 0) {
         root.themes.sort(function(a, b) { return a.name.localeCompare(b.name) })
         root.themeCount = root.themes.length
         root.writeJson(root.themesFile, root.themes)
-        console.log("mark.lock-themes: +" + added + " built-in wallpapers in the Background tab")
+        console.log("mark.lock-themes: built-in wallpapers +" + added + " -" + removedCount + " (Background tab)")
       }
     })
   }
