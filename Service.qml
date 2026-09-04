@@ -401,6 +401,7 @@ Item {
     id: wallpaperRescanTimer
     interval: 30000
     repeat: true
+    running: true
     onTriggered: root.scanBuiltinBackgrounds()
   }
 
