@@ -120,6 +120,14 @@ The Background tab can play **live wallpapers**, not just static images:
   cropped to fill.
 - **GIF/APNG** files set with `omarchy theme bg set <file>` also animate.
 
+Playing video/GIF wallpapers needs the optional **live-background renderer**
+plugin (`mark.live-background`), whose source is vendored in this repo under
+`live-background/`. To install it locally, copy that folder to
+`~/.config/omarchy/plugins/mark.live-background/`, rename
+`manifest.json.example` → `manifest.json`, disable `omarchy.background` and
+add the plugin id to `shell.json`, then restart the shell. Without it, video
+themes are still applied but stay static.
+
 ### Built-in Omarchy wallpapers
 
 The Background tab also lists every wallpaper Omarchy ships plus your own,
