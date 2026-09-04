@@ -77,6 +77,13 @@ Item {
   // Explicit lockMode from shell.json / config.json — respected at startup
   // (see the comment on lockMode). Without it the themed lock auto-activates.
   property bool lockModeExplicit: false
+  // Set when the lock app crashed repeatedly and the native Omarchy lock was
+  // auto-restored (see restoreNativeLock). Surfaced in status.json so the
+  // menu can tell the user why the themed lock is no longer in charge;
+  // persisted in stateDir/recovered-native so the notice survives the
+  // shell restart that re-registers the native plugin.
+  property double recoveredNativeAt: 0
+  readonly property string recoveredNativeFile: stateDir + "/recovered-native"
   property bool liveRendererPresent: false
   property var storedConfig: ({})
 
@@ -198,6 +205,7 @@ Item {
       liveRendererPresent: root.liveRendererPresent,
       lockAppInstalled: root.lockAppInstalled,
       lockMode: root.lockMode,
+      recoveredNativeAt: root.recoveredNativeAt,
       themedLockActive: root.themedLockActive,
       sessionSecure: root.sessionSecure,
       lockAppDir: root.lockAppDir,
@@ -913,16 +921,16 @@ Item {
 
   function startSafeFallbackLock() {
     if (root.lockFallbacksLeft <= 0) {
-      root.fail("The themed lock app failed repeatedly — the session was left unlocked. " +
-        "Check the theme or switch Lock screen back to Native.")
-      root.releaseStrandedLock()
+      // The safe theme failed too — the lock APP itself is broken, and
+      // girl-coffee inherits the same app. Further themed attempts are
+      // pointless: hand the lock back to the native Omarchy lock.
+      root.restoreNativeLock("no theme could lock (safe fallback failed as well)")
       return
     }
     root.lockFallbacksLeft -= 1
     var theme = String(root.currentLock || "").trim()
     if (!root.findTheme(root.safeLockTheme)) {
-      root.fail("The lock app failed and no safe fallback theme is available — session left unlocked.")
-      root.releaseStrandedLock()
+      root.restoreNativeLock("no safe fallback theme available")
       return
     }
     if (theme !== root.safeLockTheme) {
@@ -938,6 +946,42 @@ Item {
       root.message = "Themes: \"" + theme + "\" failed to lock — using " + root.safeLockTheme + " instead. Set a different Lock theme."
       root.writeStatus()
     })
+  }
+
+  // Last-resort recovery: the themed lock PIPELINE is broken (theme AND safe
+  // fallback failed). Safe to release, re-enable and restart here because the
+  // session lock is released BEFORE the shell restart — no lock client is
+  // ever orphaned (the black-lock incident's root cause). Everything is
+  // persisted first: even a failed restart leaves the native lock in charge
+  // on next boot.
+  function restoreNativeLock(reason) {
+    console.log("mark.lock-themes: restoring native lock (" + reason + ")")
+    root.recoveredNativeAt = Date.now()
+    root.writeJson(root.recoveredNativeFile, { at: root.recoveredNativeAt, reason: reason })
+    root.writeJson(root.configFile, root.mergedConfig({ lockMode: "native" }))
+    root.releaseStrandedLock(function() {
+      // Mirrors setLockMode("native"): re-enable BOTH plugins the themed
+      // takeover disabled, so whichever was the original native lock returns.
+      runCmd(["bash", "-c",
+        "for id in dumidu.orbital-lock omarchy.lock; do timeout 5 omarchy-shell shell setPluginEnabled \"$id\" true >/dev/null 2>&1 || true; done"],
+        function() {
+          root.setDone("idle", "The lock app crashed repeatedly (" + reason + ") — switched to the native Omarchy lock. " +
+            "Your themes are kept; re-enable the themed lock with ⚙ in the QyLock menu. Restarting the shell…")
+          restartShellTimer.start()
+        })
+    })
+  }
+
+  // Fires the shell restart that makes the re-enabled native lock register.
+  // Armed only after the restore above has fully persisted and released the
+  // session lock.
+  Timer {
+    id: restartShellTimer
+    interval: 4000
+    repeat: false
+    onTriggered: {
+      runCmd(["omarchy", "restart", "shell"], null)
+    }
   }
 
   // Runs the bundled release tool (lock->unlock protocol cycle) to clear a
@@ -1118,6 +1162,8 @@ Item {
     if (mode !== "themed" && mode !== "native") return
     if (mode === root.lockMode) return
     if (mode === "themed") {
+      root.recoveredNativeAt = 0
+      runCmd(["bash", "-c", "rm -f " + shq(root.recoveredNativeFile)], null)
       root.setBusy("switching-lock", "Switching to the themed lock…")
       // 1. Release the "lock" IPC target: disable the native lock plugin
       //    (live, persisted by the shell config mutator).
@@ -1140,7 +1186,7 @@ Item {
       // 1. Release the "lock" target before re-enabling the native plugin.
       root.writeJson(root.configFile, root.mergedConfig({ lockMode: "native" }))
       runCmd(["bash", "-c",
-        "timeout 5 omarchy-shell shell setPluginEnabled dumidu.orbital-lock true >/dev/null 2>&1 || true"],
+        "for id in dumidu.orbital-lock omarchy.lock; do timeout 5 omarchy-shell shell setPluginEnabled \"$id\" true >/dev/null 2>&1 || true; done"],
         function() {
           root.setDone("idle", "Native lock restored — the Omarchy lock screen is in charge again.")
         })
@@ -1335,11 +1381,21 @@ Item {
       root.readCurrentSddm()
       root.readCurrentLock()
       root.ensureLauncherEntries()
-      // The menu no longer exposes a lock-provider switch: on a default
-      // (unset) install the repo lock takes charge so Lock Preview / Apply
-      // behave as advertised. An explicit "native" in shell.json /
-      // config.json is respected and the takeover stays disabled.
+      // On a default (unset) install the repo lock takes charge so Lock
+      // Preview / Apply behave as advertised; an explicit "native" in
+      // shell.json / config.json (menu ⚙ or crash recovery) is respected.
       if (root.lockMode !== "themed" && !root.lockModeExplicit) root.setLockMode("themed")
+      // Surface a crash-recovery marker (native lock auto-restored) across
+      // the shell restart that followed it.
+      runCmd(["bash", "-c", "cat " + shq(root.recoveredNativeFile) + " 2>/dev/null || true"], function(code, out) {
+        var raw = String(out || "").trim()
+        var marker = null
+        try { marker = JSON.parse(raw) } catch (e) {}
+        if (marker && marker.at) {
+          root.recoveredNativeAt = Number(marker.at) || 0
+          root.writeStatus()
+        }
+      })
       if (root.autoSync) root.sync()
       else {
         root.phase = "idle"

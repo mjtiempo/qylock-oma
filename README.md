@@ -139,6 +139,10 @@ The picker is a square theme grid with two tabs:
   buttons appear on the card. **Preview** locks now with that theme (without
   changing your selection); **Apply** sets both the lock theme and the SDDM
   login theme (one Polkit prompt for the SDDM part).
+- **⚙ Lock provider** (top-right of the picker) — switches between the repo
+  themed lock and the native Omarchy lock. The choice persists; your themes
+  stay installed either way. A crash that breaks the themed lock switches
+  back to native automatically (see Safety net).
 - **Background** — click a card, then **Apply** to use its artwork as the
   Omarchy background (lock screen + wallpaper).
 
@@ -206,9 +210,10 @@ suspend — `omarchy system lock`) shows the selected theme's lock screen with
 the repo's design. The native Omarchy lock plugin is disabled while the
 plugin is active (password unlock only — no fingerprint).
 
-To restore the native Omarchy lock, switch back through the plugin (this
-persists to `config.json`, whose `lockMode` field wins over `shell.json`),
-re-enable the native plugin, then restart the shell:
+To restore the native Omarchy lock: open the picker, hit **⚙** (top-right)
+and choose **Use native lock** — one action, persisted (your themes stay
+installed). The equivalent CLI path re-enables the native plugin and
+persists to `config.json` (whose `lockMode` field wins over `shell.json`):
 
 ```sh
 omarchy-shell mark.lock-themes setLockMode native
@@ -249,6 +254,12 @@ A broken theme must never lock you out. The plugin guards the themed lock:
 - **no stranded locks** — after an abnormal exit the plugin probes the
   compositor lock state and re-locks with the safe theme if the session is
   still held, so you can always unlock with your password.
+- **native restore (v1.30)** — if the safe fallback fails too, the lock app
+  itself is broken. The plugin releases the session lock, hands the `lock`
+  target back to the native Omarchy lock (persisted), and restarts the shell
+  — the lock is released *before* the restart, so no lock client is ever
+  orphaned. The picker shows a ⚠ notice with a ⚙ shortcut to re-enable the
+  themed lock.
 - **launch pre-flight (v1.29)** — before `lock.sh` runs, the theme's flat
   `themes_link/<name>` path is re-linked (nested themes) and `Main.qml`
   presence asserted; a missing/incomplete theme falls back to the safe theme

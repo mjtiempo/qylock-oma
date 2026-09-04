@@ -37,6 +37,8 @@ Item {
   property bool opened: false
   // "lock" = Lock & SDDM tab, "background" = Background tab.
   property string tab: "lock"
+  // ⚙ lock-provider panel (repo themed lock vs native Omarchy lock).
+  property bool providerPanelVisible: false
 
   function open(payloadJson) {
     root.opened = true
@@ -45,6 +47,7 @@ Item {
 
   function close() {
     root.opened = false
+    root.providerPanelVisible = false
   }
 
   function refresh() {
@@ -67,6 +70,8 @@ Item {
   property bool animatedBg: false
   property bool lockAppInstalled: false
   property bool themedLockActive: false
+  property string lockMode: "themed"
+  property double recoveredNativeAt: 0
   property var themeList: []
 
   // ---------------------------------------------------------------- styling
@@ -150,6 +155,8 @@ Item {
     if (typeof j.animatedBg === "boolean") root.animatedBg = j.animatedBg
     if (typeof j.lockAppInstalled === "boolean") root.lockAppInstalled = j.lockAppInstalled
     if (typeof j.themedLockActive === "boolean") root.themedLockActive = j.themedLockActive
+    if (typeof j.lockMode === "string") root.lockMode = j.lockMode
+    if (typeof j.recoveredNativeAt === "number") root.recoveredNativeAt = j.recoveredNativeAt
   }
 
   function applyThemes(raw) {
@@ -224,7 +231,8 @@ Item {
       Keys.priority: Keys.BeforeItem
       Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape) {
-          root.close()
+          if (root.providerPanelVisible) root.providerPanelVisible = false
+          else root.close()
           event.accepted = true
         }
       }
@@ -256,14 +264,29 @@ Item {
         spacing: root.gap
 
         // ------------------------------------------------------------ header
-        Text {
+        Row {
           width: parent.width
-          text: "QyLock Oma - SDDM and Lock themes"
-          color: root.foreground
-          font.family: Style.font.family
-          font.pixelSize: Style.font.title + 4
-          font.bold: true
-          elide: Text.ElideRight
+          spacing: Style.space(10)
+
+          Text {
+            width: parent.width - Style.space(58)
+            height: Style.space(44)
+            verticalAlignment: Text.AlignVCenter
+            text: "QyLock Oma - SDDM and Lock themes"
+            color: root.foreground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.title + 4
+            font.bold: true
+            elide: Text.ElideRight
+          }
+
+          Button {
+            width: Style.space(48)
+            text: "⚙"
+            accent: root.accent
+            selected: root.providerPanelVisible
+            onClicked: root.providerPanelVisible = !root.providerPanelVisible
+          }
         }
 
         // Status feedback: only shown when it matters (error / working /
@@ -279,6 +302,19 @@ Item {
           color: root.phase === "error" ? Color.urgent : root.accent
           font.family: Style.font.family
           font.pixelSize: Style.font.body
+          wrapMode: Text.WordWrap
+        }
+
+        // Crash-recovery notice: the native lock was auto-restored after the
+        // themed lock app failed; shown until the themed lock is re-engaged.
+        Text {
+          width: parent.width
+          visible: root.recoveredNativeAt > 0
+          text: "⚠ The themed lock crashed — the native Omarchy lock is active. Use ⚙ to re-enable repo themes."
+          color: Color.urgent
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+          font.bold: true
           wrapMode: Text.WordWrap
         }
 
@@ -553,6 +589,107 @@ Item {
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
           wrapMode: Text.WordWrap
+        }
+      }
+
+      // ------------------------------------------------ lock-provider ⚙
+      // Sibling of the Column, anchored to the card (paints above it).
+      Rectangle {
+        id: providerPanel
+        visible: root.providerPanelVisible
+        anchors.fill: parent
+        z: 20
+        radius: Style.cornerRadius
+        color: root.surface
+        border.width: 1
+        border.color: root.cardBorder
+
+        // Swallow clicks outside the panel controls.
+        MouseArea {
+          anchors.fill: parent
+          onClicked: {}
+        }
+
+        Column {
+          width: parent.width - root.padding * 2
+          anchors.centerIn: parent
+          spacing: root.gap
+
+          Text {
+            width: parent.width
+            text: "Lock provider"
+            color: root.foreground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.title
+            font.bold: true
+          }
+
+          Text {
+            width: parent.width
+            text: "Repo lock: the qylock theme you select locks the screen (Preview/Apply work). "
+              + "Native: Omarchy's built-in lock screen — your themes stay installed, they just don't lock. "
+              + "Preview always shows the repo theme."
+            color: root.muted
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+            wrapMode: Text.WordWrap
+          }
+
+          Text {
+            width: parent.width
+            visible: root.recoveredNativeAt > 0
+            text: "The native lock is active because the themed lock crashed last session."
+            color: Color.urgent
+            font.family: Style.font.family
+            font.pixelSize: Style.font.bodySmall
+            wrapMode: Text.WordWrap
+          }
+
+          Row {
+            width: parent.width
+            spacing: Style.space(8)
+
+            Button {
+              width: (parent.width - Style.space(8)) / 2
+              text: "Use repo themes"
+              accent: root.accent
+              selected: root.lockMode === "themed"
+              enabled: root.lockMode !== "themed"
+              onClicked: {
+                root.request("setLockMode", "themed")
+                root.providerPanelVisible = false
+              }
+            }
+
+            Button {
+              width: (parent.width - Style.space(8)) / 2
+              text: "Use native lock"
+              accent: root.accent
+              selected: root.lockMode === "native"
+              enabled: root.lockMode !== "native"
+              onClicked: {
+                root.request("setLockMode", "native")
+                root.providerPanelVisible = false
+              }
+            }
+          }
+
+          Text {
+            width: parent.width
+            visible: root.lockMode === "native"
+            text: "The switch persists. A shell restart makes the native plugin register fully — until then the keybinding still uses the plugin's own handoff."
+            color: root.muted
+            font.family: Style.font.family
+            font.pixelSize: Style.font.bodySmall
+            wrapMode: Text.WordWrap
+          }
+
+          Button {
+            width: parent.width
+            text: "Close"
+            accent: root.accent
+            onClicked: root.providerPanelVisible = false
+          }
         }
       }
 
