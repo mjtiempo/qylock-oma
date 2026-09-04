@@ -45,7 +45,7 @@ check_policy() {
 
 if [ "${1:-}" = "--trees" ]; then
   # ------------------------------------------------------------ mode 2: trees
-  index="$2"; assets="$3"; lock_sub="$4"
+  index="${2:-}"; assets="${3:-}"; lock_sub="${4:-}"
   [ -n "$index" ] && [ -n "$assets" ] && [ -n "$lock_sub" ] \
     || fail "usage: $0 --trees <index.json> <assets-dir> <lock-subdir>"
   [ -f "$index" ] || fail "missing catalog index"
@@ -82,7 +82,7 @@ EOF
 fi
 
 # -------------------------------------------------------------- mode 1: sig
-index="$1"; signers="$2"; principal="$3"; ns="${4:-file}"
+index="${1:-}"; signers="${2:-}"; principal="${3:-}"; ns="${4:-file}"
 [ -n "$index" ] && [ -n "$signers" ] && [ -n "$principal" ] \
   || fail "usage: $0 <index.json> <allowed-signers> <principal> [namespace]"
 [ -f "$index" ] || fail "missing catalog index"

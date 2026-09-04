@@ -21,7 +21,7 @@
 #   qylock-catalog@mjtiempo ssh-ed25519 <contents of ~/.ssh/qylock-catalog-signing.pub>
 set -eu
 
-up="$1"; catdir="$2"; key="$3"; principal="$4"
+up="${1:-}"; catdir="${2:-}"; key="${3:-}"; principal="${4:-}"
 [ -n "$up" ] && [ -n "$catdir" ] && [ -n "$key" ] && [ -n "$principal" ] \
   || { echo "usage: $0 <upstream-checkout> <catalog-dir> <signing-key> <principal>" >&2; exit 2; }
 [ -d "$up/.git" ] || { echo "upstream checkout missing: $up" >&2; exit 2; }

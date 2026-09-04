@@ -1,15 +1,5 @@
 # Allowed signers for the QyLock theme catalog (ssh-keygen -Y verify).
-#
-# Format: one line per signer:
-#   <principal> <keytype> <base64-public-key>
-#
-# The principal must match the -I value used when signing and the
-# catalogSignerId property in Service.qml.
-#
-# >>> REPLACE the placeholder key below with the real catalog-signing
-# >>> public key before shipping:
-# >>>   1. ssh-keygen -t ed25519 -N "" -f ~/.ssh/qylock-catalog-signing
-# >>>   2. paste the line from ~/.ssh/qylock-catalog-signing.pub below
-# >>>   3. keep the private key offline; sign catalog releases with
-# >>>      tools/build-catalog.sh using it
-qylock-catalog@mjtiempo ssh-ed25519 AAAA_PLACEHOLDER_REPLACE_WITH_REAL_PUBLIC_KEY
+# Format: <principal> <keytype> <base64-public-key>
+# The principal must match catalogSignerId in Service.qml and the -I value
+# used by tools/build-catalog.sh when signing.
+qylock-catalog@mjtiempo ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP1ghNeMhE/szTuPhxxORUl9kPks83L4lfGCXhE69KUx
