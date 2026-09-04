@@ -1422,7 +1422,9 @@ Item {
       var line = "  \"style.qylock\": {\"icon\":\"" + glyph + "\",\"label\":\"QyLock\",\"description\":\"Themed lock and live backgrounds picker\",\"action\":\"" + exec + "\"},\n"
       if (raw.indexOf('"style.qylock"') !== -1) {
         if (raw.indexOf('"QyLock Oma"') !== -1) {
-          var migrated = raw.replace(/"style\.qylock":\s*\{[^}]*\}/,
+          // Greedy to the LAST brace of the one-line object: the action
+          // value itself contains '{}'.
+          var migrated = raw.replace(/"style\.qylock":\s*\{.*\}/,
             '"style.qylock": {"icon":"' + glyph + '","label":"QyLock","description":"Themed lock and live backgrounds picker","action":"' + exec + '"}')
           if (migrated !== raw) {
             runCmd(["bash", "-c", "printf '%s' " + shq(migrated) + " > " + shq(menuFile)], null)
