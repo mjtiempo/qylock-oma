@@ -396,31 +396,6 @@ Item {
               }
             }
 
-            // Applied marker: small badge (no selection highlight, but the
-            // active theme stays identifiable at a glance). Sibling of the
-            // Column so it can anchor to the tile (Column children can't).
-            Rectangle {
-              visible: root.isCurrent(modelData.name)
-              height: Style.space(20)
-              width: appliedText.implicitWidth + Style.space(12)
-              radius: height / 2
-              color: Util.alpha(Color.accent, 0.16)
-              anchors.left: parent.left
-              anchors.bottom: parent.bottom
-              anchors.leftMargin: Style.space(6)
-              anchors.bottomMargin: Style.space(10)
-
-              Text {
-                id: appliedText
-                anchors.centerIn: parent
-                text: "applied"
-                color: root.accent
-                font.family: Style.font.family
-                font.pixelSize: Style.font.bodySmall
-                font.bold: true
-              }
-            }
-
             Column {
               width: parent.width - Style.space(12)
               anchors.horizontalCenter: parent.horizontalCenter
@@ -479,11 +454,25 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
               }
 
-              // Action row: appears on the selected card (Preview only in the
-              // lock tab; Apply follows the current tab's behavior).
+              // Current-theme marker: the applied card shows a plain "active"
+              // label under its name — no action buttons for it.
+              Text {
+                width: parent.width
+                visible: root.isCurrent(modelData.name)
+                text: "active"
+                color: root.accent
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                font.bold: true
+                horizontalAlignment: Text.AlignHCenter
+              }
+
+              // Action row: only on a selected card that is NOT the current
+              // one (the applied card cannot re-apply; it shows "active").
+              // Preview only in the lock tab; Apply follows the current tab.
               Row {
                 width: parent.width
-                visible: root.isSelected(modelData.name)
+                visible: root.isSelected(modelData.name) && !root.isCurrent(modelData.name)
                 spacing: Style.space(6)
                 anchors.horizontalCenter: parent.horizontalCenter
 
