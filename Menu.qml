@@ -335,7 +335,7 @@ Item {
         Text {
           width: parent.width
           visible: root.recoveredNativeAt > 0
-          text: "⚠ The themed lock crashed — the native Omarchy lock is active. Use ⚙ to re-enable repo themes."
+          text: "⚠ The themed lock crashed — the native Omarchy lock is active. Apply any theme to switch back, or use ⚙."
           color: Color.urgent
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
@@ -720,9 +720,9 @@ Item {
 
           Text {
             width: parent.width
-            text: "Repo lock: the qylock theme you select locks the screen (Preview/Apply work). "
+            text: "Repo lock: the qylock theme you select locks the screen. "
               + "Native: Omarchy's built-in lock screen — your themes stay installed, they just don't lock. "
-              + "Preview always shows the repo theme."
+              + "Applying a lock theme switches back here automatically. Preview always shows the repo theme."
             color: root.muted
             font.family: Style.font.family
             font.pixelSize: Style.font.body

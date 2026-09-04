@@ -78,10 +78,11 @@ The picker is a square theme grid with two tabs:
   changing your selection); **Apply** sets both the lock theme and the SDDM
   login theme (a "Password required to Apply SDDM theme" prompt for the
   SDDM part — afterwards SDDM applies are remembered).
-- **⚙ Lock provider** (top-right of the picker) — switches between the repo
-  themed lock and the native Omarchy lock. The choice persists; your themes
-  stay installed either way. A crash that breaks the themed lock switches
-  back to native automatically (see Safety net).
+- **⚙ Lock provider** (top-right of the picker) — switches to the native
+  Omarchy lock. The themed lock is the default: applying a lock theme (or
+  setting one from the CLI) switches back to it automatically, and a crash
+  that breaks the themed lock restores native on its own. Only switching
+  to native is a manual choice.
 
 The **search box** above the grid filters by name as you type (both tabs;
 `Escape` or ✕ clears it).

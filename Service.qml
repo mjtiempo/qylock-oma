@@ -606,15 +606,26 @@ Item {
       root.fail("No repository synced yet — run sync first.")
       return
     }
-    if (!root.lockAppInstalled) {
-      root.setBusy("installing-lock", "Installing lock app…")
-      root.installLockAppInner(function(ok, note) {
-        if (ok) root.writeLockTheme(t)
-        else root.fail(note)
+    // Setting a lock theme always returns the lock to the themed provider.
+    var proceed = function() {
+      if (!root.lockAppInstalled) {
+        root.setBusy("installing-lock", "Installing lock app…")
+        root.installLockAppInner(function(ok, note) {
+          if (ok) root.writeLockTheme(t)
+          else root.fail(note)
+        })
+        return
+      }
+      root.writeLockTheme(t)
+    }
+    if (root.lockMode !== "themed") {
+      root.setLockMode("themed", function(ok, msg) {
+        if (ok) proceed()
+        else root.fail(msg || "Could not switch to the themed lock.")
       })
       return
     }
-    root.writeLockTheme(t)
+    proceed()
   }
 
   function writeLockThemeFiles(name) {
@@ -710,19 +721,32 @@ Item {
       root.fail("\"" + name + "\" is a theme collection folder (sub-themes inside) — pick one of its sub-theme names instead.")
       return
     }
-    root.setBusy("applying-theme", "Applying \"" + name + "\" to lock + SDDM…")
-    root.ensureThemeAssets(t, function(ok, note) {
-      if (!ok) { root.fail("Could not fetch \"" + name + "\" assets: " + note); return }
-      root.installSddmInner(name, function(ok2, msg) {
-        if (!ok2) {
-          root.fail(msg)
-          return
-        }
-        root.writeLockThemeFiles(name)
-        root.currentLock = name
-        root.setDone("idle", "\"" + name + "\" applied to the lock and SDDM (SDDM shows at next login).")
+    // Applying a lock theme always returns the lock to the themed provider
+    // — only switching to NATIVE is an explicit choice (⚙ panel). This also
+    // self-heals the crash-recovery state (⚠ banner clears on apply).
+    var proceed = function() {
+      root.setBusy("applying-theme", "Applying \"" + name + "\" to lock + SDDM…")
+      root.ensureThemeAssets(t, function(ok, note) {
+        if (!ok) { root.fail("Could not fetch \"" + name + "\" assets: " + note); return }
+        root.installSddmInner(name, function(ok2, msg) {
+          if (!ok2) {
+            root.fail(msg)
+            return
+          }
+          root.writeLockThemeFiles(name)
+          root.currentLock = name
+          root.setDone("idle", "\"" + name + "\" applied to the lock and SDDM (SDDM shows at next login).")
+        })
       })
-    })
+    }
+    if (root.lockMode !== "themed") {
+      root.setLockMode("themed", function(ok, msg) {
+        if (ok) proceed()
+        else root.fail(msg || "Could not switch to the themed lock.")
+      })
+      return
+    }
+    proceed()
   }
 
   // ------------------------------------------------------- background apply
@@ -1286,9 +1310,15 @@ Item {
 
   // Switches the lock provider. Persists the mode in config.json; the
   // configWatcher flips the "lock" IpcHandler (below) via lockMode.
-  function setLockMode(mode) {
-    if (mode !== "themed" && mode !== "native") return
-    if (mode === root.lockMode) return
+  function setLockMode(mode, done) {
+    if (mode !== "themed" && mode !== "native") {
+      if (done) done(false, "invalid lock mode: " + mode)
+      return
+    }
+    if (mode === root.lockMode) {
+      if (done) done(true, "")
+      return
+    }
     if (mode === "themed") {
       root.recoveredNativeAt = 0
       runCmd(["bash", "-c", "rm -f " + shq(root.recoveredNativeFile)], null)
@@ -1304,9 +1334,11 @@ Item {
             root.installLockAppInner(function(ok, note) {
               if (ok) root.setDone("idle", "Themed lock enabled — locking now shows the repo theme. (Native lock disabled)")
               else root.fail(note)
+              if (done) done(ok, ok ? "" : note)
             })
           } else {
             root.setDone("idle", "Themed lock enabled — locking now shows the repo theme. (Native lock disabled)")
+            if (done) done(true, "")
           }
         })
     } else {
@@ -1317,6 +1349,7 @@ Item {
         "for id in dumidu.orbital-lock omarchy.lock; do timeout 5 omarchy-shell shell setPluginEnabled \"$id\" true >/dev/null 2>&1 || true; done"],
         function() {
           root.setDone("idle", "Native lock restored — the Omarchy lock screen is in charge again.")
+          if (done) done(true, "")
         })
     }
   }
