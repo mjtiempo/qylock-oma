@@ -19,7 +19,7 @@ Works out of the box with [qylock](https://github.com/Darkkal44/qylock)
 (40 themes incl. the clockwork family) and any other repository that follows
 the same layout:
 
-```
+```text
 <repo>/
 ├── themes/
 │   ├── <theme-name>/      # SDDM theme: Main.qml, theme.conf, metadata.desktop, bg.png…
@@ -29,7 +29,7 @@ the same layout:
 
 ## Theme source
 
-All themes, the Quickshell lock app, and the animated previews come from:
+All themes and the Quickshell lock app come from:
 
 - **Repository:** [Darkkal44/qylock](https://github.com/Darkkal44/qylock)
   by **Darkkal44** — "a bunch of lockscreen themes for SDDM and Quickshell"
@@ -38,8 +38,9 @@ All themes, the Quickshell lock app, and the animated previews come from:
 - `quickshell-lockscreen/` — the repo's Quickshell lock app
   (lock.sh, lock_shell.qml, shim/, imports/), installed at
   `~/.local/share/omarchy/mark.lock-themes/lockscreen/`
-- `Assets/*.gif` — the animated previews shown in the theme grid (from
-  qylock's README gallery)
+- `Assets/*.gif` — qylock's README-gallery animations (not used by the
+  catalog flow; the grid's previews are the catalog repo's static PNGs —
+  see Architecture below)
 
 The fonts, artwork, and theme designs are the property of their respective
 creators; several themes need a font that cannot be bundled (see qylock's
@@ -205,10 +206,20 @@ suspend — `omarchy system lock`) shows the selected theme's lock screen with
 the repo's design. The native Omarchy lock plugin is disabled while the
 plugin is active (password unlock only — no fingerprint).
 
-To restore the native Omarchy lock, add `"lockMode": "native"` to the
-plugin's `shell.json` entry and re-enable the native plugin
-(`omarchy-shell shell setPluginEnabled dumidu.orbital-lock true`),
-then restart the shell.
+To restore the native Omarchy lock, switch back through the plugin (this
+persists to `config.json`, whose `lockMode` field wins over `shell.json`),
+re-enable the native plugin, then restart the shell:
+
+```sh
+omarchy-shell mark.lock-themes setLockMode native
+omarchy-shell shell setPluginEnabled dumidu.orbital-lock true
+omarchy restart shell
+```
+
+Offline variant: add `"lockMode": "native"` to the plugin's `shell.json`
+entry and remove `~/.local/state/omarchy/mark.lock-themes/config.json`
+(an auto-persisted `lockMode: "themed"` there would win), then restart the
+shell.
 
 The installed lock app gets a small compatibility shim injected at install
 time (an inert `keyboard` object + `sddm.hostName`) so themes that use SDDM's
@@ -220,10 +231,10 @@ A broken theme must never lock you out. The plugin guards the themed lock:
 
 - **theme-collection flattening** — `clockwork` is a folder of sub-themes
   (`orbital`, `neo-orbital`, `tape`), each a complete theme one level deeper
-  than the app expects. The scan promotes them to flat, first-class themes
-  (`clockwork-orbital`, `clockwork-neo-orbital`, `clockwork-tape`) with
-  symlinks in the lock app's `themes_link/` so they lock and install like any
-  other theme.
+  than the app expects. The catalog promotes them to flat, first-class themes
+  (`clockwork-orbital`, `clockwork-neo-orbital`, `clockwork-tape`), and the
+  launch pre-flight re-links the lock app's `themes_link/<flat-name>` to the
+  real sub-theme directory so they lock and install like any other theme.
 - **known-broken badge** — themes known to hang the lock app (currently
   `Genshin`: needs a manually-downloaded font and crashes on session-model
   handling) are marked with ⚠ in the menu.
@@ -286,9 +297,10 @@ Optional `shell.json` plugin entry (defaults shown):
 The repository URL/branch is configured through the `shell.json` plugin entry
 (or `~/.local/state/omarchy/mark.lock-themes/config.json`, which wins over
 `shell.json`). Sync happens automatically on start and can be triggered with
-`omarchy-shell mark.lock-themes sync`. Extra themes can be dropped directly
-into `~/.local/share/omarchy/mark.lock-themes/repo/themes/<name>/` and are
-picked up by the next scan. State and downloaded themes live under:
+`omarchy-shell mark.lock-themes sync`. The theme list is the catalog's
+`index.json` — each entry's `subpath` addresses `themes/<subpath>/` in the
+theme repo, fetched on demand (to add a theme, extend the catalog repo).
+State and downloaded themes live under:
 
 - `~/.local/share/omarchy/mark.lock-themes/` — repo clone, installed lock app
 - `~/.local/state/omarchy/mark.lock-themes/` — status.json, themes.json, state

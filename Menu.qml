@@ -129,13 +129,6 @@ Item {
     return root.selected === name
   }
 
-  function applyTheme(name) {
-    if (root.tab === "background") root.request("applyBackground", name)
-    else root.request("applyBoth", name)
-  }
-
-
-
   function isCurrent(name) {
     if (root.tab === "background") return root.currentBg === name
     return root.currentLock === name && root.currentSddm === name

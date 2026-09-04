@@ -40,7 +40,6 @@ Item {
   readonly property string themesFile: stateDir + "/themes.json"
   readonly property string requestFile: stateDir + "/request.json"
   readonly property string configFile: stateDir + "/config.json"
-  readonly property string themesRawFile: stateDir + "/themes.txt"
   readonly property string lockThemeStateFile: stateDir + "/lock-theme"
   readonly property string sddmConf: "/etc/sddm.conf.d/theme.conf"
 
@@ -61,6 +60,9 @@ Item {
   // "native" = the Omarchy in-shell lock stays in charge (default);
   // "themed" = this plugin answers the "lock" IPC target and runs the
   // repository's Quickshell lock with the selected theme.
+  // An explicit value from shell.json / config.json is respected; a default
+  // (unset) install auto-activates "themed" on startup so Lock Preview /
+  // Apply work out of the box.
   property string lockMode: "native"
   // Automatically register launcher entries on first load: an Omarchy menu
   // row (extensions/omarchy-menu.jsonc) + a desktop entry. Idempotent.
@@ -72,6 +74,9 @@ Item {
   // `animatedBg` always wins over the auto state.
   property bool animatedBg: false
   property bool animatedBgExplicit: false
+  // Explicit lockMode from shell.json / config.json — respected at startup
+  // (see the comment on lockMode). Without it the themed lock auto-activates.
+  property bool lockModeExplicit: false
   property bool liveRendererPresent: false
   property var storedConfig: ({})
 
@@ -249,85 +254,11 @@ Item {
   // broken model handling). They still work as SDDM themes; the themed lock
   // falls back to the safe theme automatically when one misbehaves.
   property var knownBrokenLockThemes: ["Genshin"]
-  // Sanitization: removes stray self-referential symlink loops inside theme
-  // dirs (a theme/<name>/<name> -> theme/<name>/ loop crashes the lock app's
-  // recursive file walking). Runs on every scan.
-  property var lastSanitizeCount: 0
-
-  function sanitizeThemeSymlinks() {
-    runCmd(["bash", "-c",
-      "cd " + shq(root.repoDir + "/themes") + " 2>/dev/null || exit 0" +
-      "; for d in */; do [ -d \"$d\" ] || continue; n=$(basename \"$d\")" +
-      "; [ -L \"$d/$n\" ] && rm -f \"$d/$n\" && echo \"loop:$d/$n\"; done" +
-      "; for d in */; do [ -d \"$d\" ] || continue; for f in \"$d\"*; do" +
-      "; [ -L \"$f\" ] && rm -f \"$f\"; done; done"], function(code, out) {
-      var removed = String(out || "").split("\n").filter(function(l) { return l.indexOf("loop:") === 0 }).length
-      root.lastSanitizeCount = removed
-      if (removed > 0) console.log("mark.lock-themes: removed " + removed + " symlink loop(s) in themes/")
-    })
-  }
-
-  // Collection folders (no Main.qml of their own; sub-themes live inside) are
-  // not selectable as lock/SDDM themes.
-  property var collectionThemes: ["clockwork"]
-
   function findTheme(name) {
     for (var i = 0; i < root.themes.length; i++) {
       if (root.themes[i].name === name) return root.themes[i]
     }
     return null
-  }
-
-  // Maps a theme name to the animated preview GIF in the repo's Assets/ dir
-  // (qylock's README gallery uses GitHub-style underscore filenames; win7 is
-  // the gif for windows_7 and clockwork.gif covers all clockwork sub-themes).
-  function themeGif(name) {
-    var special = {
-      "windows_7": "win7.gif",
-      "last-of-us": "the_last_of_us.gif",
-      "star-rail": "star_rail.gif",
-      "nier-automata": "nier_automata.gif",
-      "girl-coffee": "girl_coffee.gif",
-      "girl-pillow": "girl_pillow.gif",
-      "dog-samurai": "dog_samurai.gif",
-      "man-bicycle": "man_bicycle.gif",
-      "women-umbrella": "women_umbrella.gif",
-      "ninja-gaiden": "ninja_gaiden.gif",
-      "genshin": "genshin.gif",
-      "osu": "osu.gif",
-      "osumania": "osumania.gif",
-      "minecraft": "minecraft.gif",
-      "terraria": "terraria.gif",
-      "sword": "sword.gif",
-      "winter": "winter.gif",
-      "field": "field.gif",
-      "enfield": "enfield.gif",
-      "forest": "forest.gif",
-      "material-you": "material-you.gif",
-      "nothing": "nothing.gif",
-      "wuwa": "wuwa.gif",
-      "R1999_1": "R1999_1.gif",
-      "R1999_2": "R1999_2.gif",
-      "pixel-coffee": "pixel_coffee.gif",
-      "pixel-dusk-city": "pixel_dusk_city.gif",
-      "pixel-hollowknight": "pixel_hollowknight.gif",
-      "pixel-munchlax": "pixel_munchlax.gif",
-      "pixel-night-city": "pixel_night_city.gif",
-      "pixel-rainyroom": "pixel_rainyroom.gif",
-      "pixel-skyscrapers": "pixel_skyscrapers.gif",
-      "pixel-cyberpunk": "pixel-cyberpunk.gif",
-      "pixel-emerald": "pixel-emerald.gif",
-      "pixel-sakura": "pixel-sakura.gif",
-      "pixel-waterfall": "pixel-waterfall.gif",
-      "ninja_gaiden": "ninja_gaiden.gif"
-    }
-    if (special[name]) return root.repoDir + "/Assets/" + special[name]
-    // Case-insensitive fallback (Genshin vs genshin, etc.): theme dir names
-    // use their own casing while the README/Assets use lowercase.
-    var lower = String(name).toLowerCase()
-    if (special[lower]) return root.repoDir + "/Assets/" + special[lower]
-    if (name.indexOf("clockwork") === 0) return root.repoDir + "/Assets/clockwork.gif"
-    return ""
   }
 
   // Builds the theme model from the catalog's index.json. The catalog carries
@@ -372,131 +303,6 @@ Item {
       root.themeCount = list.length
       root.writeJson(root.themesFile, root.themes)
       if (cb) cb()
-    })
-  }
-
-  function parseScan(raw) {
-    var list = []
-    var lines = String(raw || "").split("\n")
-    var nestedNames = []
-    for (var i = 0; i < lines.length; i++) {
-      var parts = lines[i].split("\t")
-      if (parts.length < 8 || parts[0].length === 0) continue
-      var name = parts[0]
-      var bg = parts[4]
-      var video = parts[7] === "1"
-      // Real theme directory (nested for promoted sub-themes).
-      var realPath = parts.length >= 9 && parts[8].length > 0 ? parts[8] : (root.repoDir + "/themes/" + name)
-      var themePath = realPath
-      var hasMain = parts[1] === "1"
-      list.push({
-        name: name,
-        main: hasMain,
-        conf: parts[2] === "1",
-        meta: parts[3] === "1",
-        background: bg,
-        kind: parts[5] || "image",
-        color: parts[6] || "",
-        video: video,
-        collection: false,
-        collectionOf: "",
-        flattenedFrom: (realPath.indexOf("/clockwork/") !== -1) ? "clockwork" : "",
-        risky: root.knownBrokenLockThemes.indexOf(name) !== -1,
-        path: themePath,
-        gif: root.themeGif(name),
-        preview: (!video && bg.length > 0) ? themePath + "/" + bg : ""
-      })
-      // Nested sub-themes (e.g. clockwork/neo-orbital, renamed to the flat
-      // clockwork-neo-orbital) need a flat-name symlink in themes_link.
-      // Top-level themes live at repo/themes/<name>/ exactly; anything deeper
-      // is a promoted sub-theme. Compare with the trailing slash normalized.
-      var norm = realPath.replace(/\/+$/, "")
-      var flatPath = root.repoDir + "/themes/" + name
-      if (norm !== flatPath) {
-        nestedNames.push(name + "\t" + realPath)
-      }
-    }
-    list.sort(function(a, b) { return a.name.localeCompare(b.name) })
-    root.themes = list
-    root.themeCount = list.length
-    root.writeJson(root.themesFile, root.themes)
-    // The lock app resolves themes at themes_link/<name>; promote nested
-    // sub-theme names with symlinks so lock.sh finds them at their flat name.
-    root.promoteNestedThemes(nestedNames)
-  }
-
-  function promoteNestedThemes(pairs) {
-    if (!pairs || pairs.length === 0) return
-    // Remember links for when the lock app is (re)installed, and link now if
-    // it is already in place.
-    root.nestedLinkPairs = pairs
-    if (root.lockAppInstalled) root.applyNestedLinks()
-  }
-
-  property var nestedLinkPairs: []
-
-  function applyNestedLinks() {
-    var pairs = root.nestedLinkPairs
-    if (!pairs || pairs.length === 0) return
-    var script = "linkdir=" + shq(root.lockAppDir + "/themes_link") + "; mkdir -p \"$linkdir\""
-    for (var i = 0; i < pairs.length; i++) {
-      var parts = String(pairs[i]).split("\t")
-      if (parts.length < 2) continue
-      script += "; ln -sfn " + shq(parts[1]) + " \"$linkdir/" + String(parts[0]).replace(/[^\w.-]/g, "_") + "\""
-    }
-    runCmd(["bash", "-c", script], null)
-  }
-
-  function scanThemes(cb) {
-    runCmd(["bash", "-c",
-      "repo=" + shq(root.repoDir) + "; out=" + shq(root.themesRawFile) +
-      "; : > \"$out\"; [ -d \"$repo/themes\" ] || exit 0" +
-      // First pass: top-level themes. Collection folders (no Main.qml) are
-      // walked one level deeper for their sub-themes, which are promoted to
-      // flat entries (clockwork/ -> clockwork-orbital, etc.) so they fit the
-      // app's one-level theme format.
-      "; scan_dir() { d=\"$1\"; flatname=\"$2\"; [ -d \"$d\" ] || return; main=0; conf=0; meta=0; bg=\"\"; typev=\"image\"; color=\"\"" +
-      "; [ -f \"$d/Main.qml\" ] && main=1; [ -f \"$d/theme.conf\" ] && conf=1; [ -f \"$d/metadata.desktop\" ] && meta=1" +
-      "; if [ -f \"$d/theme.conf\" ]; then while IFS='=' read -r k v; do case \"$k\" in" +
-      " background) bg=\"$v\" ;; type) typev=\"$v\" ;; color) color=\"$v\" ;; esac; done" +
-      " < <(grep -E '^(background|type|color)=' \"$d/theme.conf\" 2>/dev/null || true); fi" +
-      "; if [ -n \"$bg\" ] && [ ! -f \"$d/$bg\" ]; then bg=\"\"; fi" +
-      "; video=0; case \"$bg\" in *.mp4|*.webm|*.mkv|*.mov) video=1 ;; esac" +
-      "; printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \"$flatname\" \"$main\" \"$conf\" \"$meta\" \"$bg\" \"$typev\" \"$color\" \"$video\" \"$d\" >> \"$out\"" +
-      "; }" +
-      "; for d in \"$repo\"/themes/*/; do [ -d \"$d\" ] || continue" +
-      "; [ -L \"${d%/}\" ] && continue; name=$(basename \"$d\")" +
-      "; if [ -f \"$d/Main.qml\" ]; then scan_dir \"$d\" \"$name\"" +
-      "; else" +
-      // collection folder: promote each sub-theme dir to a flat entry
-      " for s in \"$d\"*/; do [ -d \"$s\" ] || continue" +
-      "; [ -f \"$s/Main.qml\" ] || continue" +
-      "; sub=$(basename \"$s\"); flat=\"${name}-${sub}\"" +
-      "; scan_dir \"$s\" \"$flat\"" +
-      "; done" +
-      "; fi; done"], function(code, out, err) {
-      var ok = code === 0
-      if (ok) {
-        // read the TSV back in a separate step (worker output is the script's own stdout)
-        root.readFileCb = function(text) {
-          root.parseScan(text)
-          if (cb) cb()
-        }
-        root.readFile(root.themesRawFile)
-      } else {
-        root.fail("Theme scan failed: " + String(err || out).trim())
-      }
-    })
-  }
-
-  property var readFileCb: null
-  function readFile(path) {
-    runCmd(["cat", path], function(code, out) {
-      if (root.readFileCb) {
-        var cb = root.readFileCb
-        root.readFileCb = null
-        cb(String(out || ""))
-      }
     })
   }
 
@@ -625,21 +431,6 @@ Item {
     })
   }
 
-  function checkLockAppPresence() {
-    runCmd(["bash", "-c", "[ -d " + shq(root.repoDir + "/" + root.lockAppSubdir) + " ] && echo yes || echo no"], function(code, out) {
-      var hasLockApp = String(out || "").indexOf("yes") === 0
-      if (hasLockApp && !root.lockAppInstalled) {
-        root.setBusy("installing-lock", "Installing lock app…")
-        root.installLockAppInner(function(ok, note) {
-          if (ok) root.setDone("idle", "Synced " + root.themeCount + " themes. " + note)
-          else root.fail(note)
-        })
-      } else {
-        root.setDone("idle", "Synced " + root.themeCount + " themes from " + root.repoName + ".")
-      }
-    })
-  }
-
   // --------------------------------------------------------- lock app setup
   function installLockApp(cb) {
     root.setBusy("installing-lock", "Installing lock app…")
@@ -671,7 +462,6 @@ Item {
       "; echo OK"], function(code, out, err) {
       if (code === 0) {
         root.lockAppInstalled = true
-        root.applyNestedLinks()
         var note = "Lock app installed: " + root.lockAppDir + "/lock.sh"
         if (cb) cb(true, note)
         else root.setDone("idle", note)
@@ -732,10 +522,21 @@ Item {
 
   // ------------------------------------------------------------- SDDM apply
   function installSddm(name) {
+    var t = root.findTheme(name)
+    if (!t) {
+      root.fail("Unknown theme: " + name)
+      return
+    }
     root.setBusy("installing-sddm", "Installing SDDM theme " + name + "… (Polkit prompt)")
-    root.installSddmInner(name, function(ok, msg) {
-      if (ok) root.setDone("idle", "SDDM theme applied: " + name + " — it takes effect at the next login screen.")
-      else root.fail(msg)
+    // Fetch the theme's files first: the sparse clone only materializes
+    // assets on Apply/Preview, and a raw copy of a never-fetched theme
+    // would fail with a confusing error.
+    root.ensureThemeAssets(t, function(ok, note) {
+      if (!ok) { root.fail("Could not fetch \"" + name + "\" assets: " + note); return }
+      root.installSddmInner(name, function(ok2, msg) {
+        if (ok2) root.setDone("idle", "SDDM theme applied: " + name + " — it takes effect at the next login screen.")
+        else root.fail(msg)
+      })
     })
   }
 
@@ -877,7 +678,10 @@ Item {
         if (p.lockThemeFile) root.lockThemeFile = root.expandHome(String(p.lockThemeFile))
         if (p.lockAppSubdir) root.lockAppSubdir = String(p.lockAppSubdir)
         if (typeof p.autoSync === "boolean") root.autoSync = p.autoSync
-        if (p.lockMode === "themed" || p.lockMode === "native") root.lockMode = String(p.lockMode)
+        if (p.lockMode === "themed" || p.lockMode === "native") {
+          root.lockMode = String(p.lockMode)
+          root.lockModeExplicit = true
+        }
         if (typeof p.animatedBg === "boolean") {
           root.animatedBg = p.animatedBg
           root.animatedBgExplicit = true
@@ -902,7 +706,10 @@ Item {
     if (cfg && cfg.branch) root.repoBranch = String(cfg.branch)
     if (cfg && cfg.lockMode) {
       var mode = String(cfg.lockMode)
-      if (mode === "themed" || mode === "native") root.lockMode = mode
+      if (mode === "themed" || mode === "native") {
+        root.lockMode = mode
+        root.lockModeExplicit = true
+      }
     }
     if (cfg && typeof cfg.animatedBg === "boolean") {
       root.animatedBg = cfg.animatedBg
@@ -1366,6 +1173,25 @@ Item {
   // lock_shell.qml processes on start; if the session is still locked,
   // restore an interactive lock UI (the launch pre-flight picks the current
   // theme or falls back to the safe theme).
+  // One-shot retry for the sweep's no-lock-app branch: fires after the lock
+  // app has had time to (re)install during startup. Re-probes the compositor
+  // first — a session the user unlocked in the meantime must not be locked
+  // again. (A real Timer: Qt.callLater's extra arguments are function
+  // arguments, not a delay.)
+  Timer {
+    id: sweepRetryTimer
+    interval: 12000
+    repeat: false
+    onTriggered: {
+      if (root.themedLockActive) return
+      runCmd(["omarchy-hyprland-session-locked"], function(code) {
+        if (code !== 0) return
+        root.lockFallbacksLeft = 1
+        root.themedLock()
+      })
+    }
+  }
+
   function sweepStrandedLocks() {
     runCmd(["bash", "-c", "pgrep -f 'lock_shell.qml' >/dev/null 2>&1 && echo FOUND || echo CLEAN"], function(code, out) {
       if (String(out || "").indexOf("FOUND") !== 0) return
@@ -1376,13 +1202,8 @@ Item {
           root.lockFallbacksLeft = 1
           if (root.themedLock() === "no-lock-app") {
             // The lock app (re)installs during this very start; the sweep can
-            // run ahead of that chain — retry once after it lands.
-            Qt.callLater(function() {
-              if (!root.themedLockActive) {
-                root.lockFallbacksLeft = 1
-                root.themedLock()
-              }
-            }, 12000)
+            // run ahead of that chain — retry once it has had time to land.
+            sweepRetryTimer.start()
           }
         })
       })
@@ -1514,10 +1335,11 @@ Item {
       root.readCurrentSddm()
       root.readCurrentLock()
       root.ensureLauncherEntries()
-      // The menu no longer exposes a lock-provider switch: the repo lock is
-      // always in charge so Lock Preview / Apply behave as advertised. Make
-      // the takeover active (disables the native lock plugin) if needed.
-      if (root.lockMode !== "themed") root.setLockMode("themed")
+      // The menu no longer exposes a lock-provider switch: on a default
+      // (unset) install the repo lock takes charge so Lock Preview / Apply
+      // behave as advertised. An explicit "native" in shell.json /
+      // config.json is respected and the takeover stays disabled.
+      if (root.lockMode !== "themed" && !root.lockModeExplicit) root.setLockMode("themed")
       if (root.autoSync) root.sync()
       else {
         root.phase = "idle"
