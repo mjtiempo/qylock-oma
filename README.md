@@ -285,6 +285,10 @@ See [docs/catalog-signing.md](docs/catalog-signing.md). In short: review the
 upstream commit, run `tools/build-catalog.sh` with the catalog-signing key,
 and push the new `index.json` + `index.json.sig`.
 
+Full background on the 2026-09-04 marketplace security review, the fix
+architecture, and the evidence:
+[docs/security-review-response-2026-09-04.md](docs/security-review-response-2026-09-04.md).
+
 ### Custom catalogs
 
 `repo`/`catalogRepo` in the plugin config change the remote URLs, but content
