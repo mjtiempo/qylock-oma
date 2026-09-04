@@ -2,6 +2,12 @@
 
 An [Omarchy](https://omarchy.org/) shell plugin that gives you an interface for using custom Lock and SDDM Themes, Setting Backgrounds and experimental video backgrounds.
 
+You can select and set Lock and SDDM Theme. You can also change backgrounds.
+Both bundled backgrounds and system backgrounds shipped in Omarchy are
+listed in the picker. Also included is an experimental support for video
+backgrounds. Users can add custom image/video backgrounds by dropping
+backgrounds in `~/Pictures/Backgrounds/`.
+
 ## Install (from git)
 
 Requires `git` (present on Omarchy by default; `omarchy pkg add git` if not):
@@ -16,8 +22,10 @@ omarchy plugin add https://github.com/mjtiempo/qylock-oma.git --enable --yes
 # 2. restart the shell to load it
 omarchy restart shell
 ```
+You can select and set Lock and SDDM Theme. You can also change backgrounds. Both bundled backgrounds and system backgrounds shipped in Omarchy are listed in the picker. Also included is an experimental support for video backgrounds. Users can add custom image/video backgrounds by dropping backgrounds in `~/Pictures/Backgrounds/`
 
-That's all. On first load the plugin:
+
+### On first load the plugin: 
 
 1. **Synchronises the theme catalog** (list + previews, ~3 MB) and prepares a
    light asset cache (lock app + safe fallback theme) — total footprint
