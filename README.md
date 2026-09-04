@@ -2,12 +2,6 @@
 
 An [Omarchy](https://omarchy.org/) shell plugin that gives you an interface for using custom Lock and SDDM Themes, Setting Backgrounds and experimental video backgrounds.
 
-You can select and set Lock and SDDM Theme. You can also change backgrounds.
-Both bundled backgrounds and system backgrounds shipped in Omarchy are
-listed in the picker. Also included is an experimental support for video
-backgrounds. Users can add custom image/video backgrounds by dropping
-backgrounds in `~/Pictures/Backgrounds/`.
-
 ## Install (from git)
 
 Requires `git` (present on Omarchy by default; `omarchy pkg add git` if not):
@@ -22,10 +16,12 @@ omarchy plugin add https://github.com/mjtiempo/qylock-oma.git --enable --yes
 # 2. restart the shell to load it
 omarchy restart shell
 ```
+
 You can select and set Lock and SDDM Theme. You can also change backgrounds. Both bundled backgrounds and system backgrounds shipped in Omarchy are listed in the picker. Also included is an experimental support for video backgrounds. Users can add custom image/video backgrounds by dropping backgrounds in `~/Pictures/Backgrounds/`
 
+![Preview](preview.png)
 
-### On first load the plugin: 
+### On first load the plugin
 
 1. **Synchronises the theme catalog** (list + previews, ~3 MB) and prepares a
    light asset cache (lock app + safe fallback theme) — total footprint
@@ -123,24 +119,6 @@ The Background tab can play **live wallpapers**, not just static images:
   cards carry a small ▶ video badge) loop on the Omarchy wallpaper, muted and
   cropped to fill.
 - **GIF/APNG** files set with `omarchy theme bg set <file>` also animate.
-
-Rendering lives in the **live-background renderer** plugin
-(`mark.live-background`, a local Omarchy plugin that replaces the static
-`omarchy.background` renderer). When it is installed and enabled
-(`omarchy.background` disabled in `shell.json`), video themes play on the
-wallpaper; without it they are still applied, just not animated.
-
-Animated backgrounds are **always enabled** — video themes apply like any
-image theme (there is no toggle; an `"animatedBg"` entry in an older
-`shell.json`/`config.json` is ignored). What actually *plays* them is the
-live-background renderer:
-
-- **Renderer installed** — the video loops muted, cropped to fill on the
-  wallpaper. The Background tab confirms the state (or notes the renderer
-  is missing).
-- **No renderer** — the theme is still applied (state link + artwork are
-  set), but the static renderer cannot display video, so the desktop stays
-  static. Install/enable `mark.live-background` to make video themes play.
 
 ### Built-in Omarchy wallpapers
 
