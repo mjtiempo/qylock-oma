@@ -1096,7 +1096,7 @@ Item {
   }
 
   function armScreenBlank() {
-    if (!root.idleBlank || root.screenBlanked) return
+    if (!root.idleBlank || root.screenBlanked || root.screenBlankArmed) return
     root.screenBlankArmed = true
     screenBlankTimer.restart()
   }
