@@ -1047,7 +1047,8 @@ Item {
 
   function mergedConfig(overrides) {
     var merged = {}
-    var keys = ["repo", "branch", "lockMode", "catalogRepo", "animatedBg", "idleBlank"]    for (var i = 0; i < keys.length; i++) {
+    var keys = ["repo", "branch", "lockMode", "catalogRepo", "animatedBg", "idleBlank"]
+    for (var i = 0; i < keys.length; i++) {
       var k = keys[i]
       if (root.storedConfig && root.storedConfig[k] !== undefined) merged[k] = root.storedConfig[k]
     }
