@@ -99,6 +99,10 @@ Item {
   // gates on it anymore).
   property bool animatedBg: true
   property bool animatedBgExplicit: false
+  // Blank the display (DPMS + keyboard backlight) shortly after the themed
+  // lock secures, mirroring the native Omarchy lock. Restored on unlock.
+  // Toggleable via the ⚙ panel / shell.json / config.json "idleBlank".
+  property bool idleBlank: true
   // Explicit lockMode from shell.json / config.json — respected at startup
   // (see the comment on lockMode). Without it the themed lock auto-activates.
   property bool lockModeExplicit: false
@@ -227,6 +231,7 @@ Item {
       currentLock: root.currentLock,
       currentBg: root.currentBg,
       animatedBg: root.animatedBg,
+      idleBlank: root.idleBlank,
       liveRendererPresent: root.liveRendererPresent,
       lockAppInstalled: root.lockAppInstalled,
       lockMode: root.lockMode,
@@ -955,6 +960,9 @@ Item {
           root.animatedBg = p.animatedBg
           root.animatedBgExplicit = true
         }
+        if (typeof p.idleBlank === "boolean") {
+          root.idleBlank = p.idleBlank
+        }
       }
     }
     // user/menu-level overrides (stateDir/config.json) win
@@ -984,6 +992,9 @@ Item {
     if (cfg && typeof cfg.animatedBg === "boolean") {
       root.animatedBg = cfg.animatedBg
       root.animatedBgExplicit = true
+    }
+    if (cfg && typeof cfg.idleBlank === "boolean") {
+      root.idleBlank = cfg.idleBlank
     }
   }
 
@@ -1036,8 +1047,7 @@ Item {
 
   function mergedConfig(overrides) {
     var merged = {}
-    var keys = ["repo", "branch", "lockMode", "catalogRepo", "animatedBg"]
-    for (var i = 0; i < keys.length; i++) {
+    var keys = ["repo", "branch", "lockMode", "catalogRepo", "animatedBg", "idleBlank"]    for (var i = 0; i < keys.length; i++) {
       var k = keys[i]
       if (root.storedConfig && root.storedConfig[k] !== undefined) merged[k] = root.storedConfig[k]
     }
@@ -1046,6 +1056,63 @@ Item {
       if (overrides && overrides[kk] !== undefined) merged[kk] = overrides[kk]
     }
     return merged
+  }
+
+  // Menu toggle: persists idleBlank to config.json and applies immediately.
+  function setIdleBlank(value) {
+    var on = String(value || "") === "true"
+    root.idleBlank = on
+    root.writeJson(root.configFile, root.mergedConfig({ idleBlank: on }))
+    if (!on) root.wakeScreen() // never leave the display blanked after disabling
+    root.setDone("idle", "Blank screen while locked: " + (on ? "on" : "off"))
+  }
+
+  // --------------------------------------------------------- screen blank
+  // Mirrors the native Omarchy lock: once the themed lock secures the
+  // session, arm a short timer and blank the display (DPMS + keyboard
+  // backlight) exactly like omarchy.lock's blankProcess does; restoring on
+  // unlock via omarchy-system-wake. Never blank an unsecured session.
+  property bool screenBlankArmed: false
+  property bool screenBlanked: false
+
+  Process {
+    id: blankProc
+    running: false
+    command: ["bash", "-c", "omarchy-brightness-keyboard off 2>/dev/null || true; omarchy-brightness-display off 2>/dev/null || hyprctl dispatch 'hl.dsp.dpms({ action = \"disable\" })' 2>/dev/null || true"]
+  }
+
+  Process {
+    id: wakeProc
+    running: false
+    command: ["bash", "-c", "omarchy-system-wake 2>/dev/null || { omarchy-brightness-display on 2>/dev/null || hyprctl dispatch 'hl.dsp.dpms({ action = \"enable\" })' 2>/dev/null || true; }"]
+  }
+
+  Timer {
+    id: screenBlankTimer
+    interval: 5000
+    repeat: false
+    onTriggered: root.runScreenBlank()
+  }
+
+  function armScreenBlank() {
+    if (!root.idleBlank || root.screenBlanked) return
+    root.screenBlankArmed = true
+    screenBlankTimer.restart()
+  }
+
+  function runScreenBlank() {
+    if (!root.idleBlank || root.screenBlanked) return
+    root.screenBlanked = true
+    root.screenBlankArmed = false
+    if (!blankProc.running) blankProc.running = true
+  }
+
+  function wakeScreen() {
+    if (!root.screenBlanked && !root.screenBlankArmed) return
+    root.screenBlanked = false
+    root.screenBlankArmed = false
+    screenBlankTimer.stop()
+    if (!wakeProc.running) wakeProc.running = true
   }
 
   function expandHome(p) {
@@ -1098,6 +1165,7 @@ Item {
     else if (op === "installLockApp") root.installLockApp()
     else if (op === "setLockMode") root.setLockMode(name)
     else if (op === "setAnimatedBg") root.setAnimatedBg(name)
+    else if (op === "setIdleBlank") root.setIdleBlank(name)
     else if (op === "testLock") { var r = root.themedLock(); if (r !== "ok") root.fail("Cannot start themed lock: " + r) }
     else if (op === "previewLock") { var r2 = root.previewLock(name); if (r2 !== "ok") root.fail("Cannot preview lock: " + r2) }
     else if (op === "fetchTheme") { var r3 = root.fetchTheme(name); if (r3 !== "started") root.fail("Cannot fetch theme: " + r3) }
@@ -1123,7 +1191,11 @@ Item {
       // unlock, which disabled Preview for every subsequent theme.
       root.writeStatus()
       if (wasActive && !everSecured && root.lockStartedAt > 0) root.handleLockDeath(everSecured)
-      else if (wasActive) root.lockExitedCleanly = true
+      else if (wasActive) {
+        root.lockExitedCleanly = true
+        // Clean unlock: the session is open again, bring the display back.
+        root.wakeScreen()
+      }
     }
   }
 
@@ -1292,6 +1364,9 @@ Item {
       if (root.themedLockActive) {
         if (locked) {
           root.probeUnlockedCount = 0
+          // Once the session is confirmed secure, blank the display shortly
+          // after (never before — an unsecured session must not go dark).
+          root.armScreenBlank()
         } else {
           root.probeUnlockedCount += 1
         }

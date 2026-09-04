@@ -75,6 +75,7 @@ Item {
   property bool lockAppInstalled: false
   property bool themedLockActive: false
   property string lockMode: "themed"
+  property bool idleBlank: false
   property double recoveredNativeAt: 0
   property var themeList: []
   // Tab-filtered grid view: built-in wallpapers only make sense in the
@@ -164,6 +165,7 @@ Item {
     if (typeof j.lockAppInstalled === "boolean") root.lockAppInstalled = j.lockAppInstalled
     if (typeof j.themedLockActive === "boolean") root.themedLockActive = j.themedLockActive
     if (typeof j.lockMode === "string") root.lockMode = j.lockMode
+    if (typeof j.idleBlank === "boolean") root.idleBlank = j.idleBlank
     if (typeof j.recoveredNativeAt === "number") root.recoveredNativeAt = j.recoveredNativeAt
   }
 
@@ -768,6 +770,16 @@ Item {
                 root.providerPanelVisible = false
               }
             }
+          }
+
+          Button {
+            width: parent.width
+            text: root.idleBlank
+              ? "Blank the screen while locked: on"
+              : "Blank the screen while locked: off"
+            accent: root.accent
+            selected: root.idleBlank
+            onClicked: root.request("setIdleBlank", root.idleBlank ? "false" : "true")
           }
 
           Text {

@@ -190,6 +190,12 @@ The installed lock app gets a small compatibility shim injected at install
 time (an inert `keyboard` object + `sddm.hostName`) so themes that use SDDM's
 keyboard context or gate login on `isQuickshell` behave correctly.
 
+Like the native Omarchy lock, the themed lock blanks the display (DPMS +
+keyboard backlight) a few seconds after the session is confirmed locked, and
+restores it on unlock. To keep the screen on while locked, open the picker, hit
+**⚙** and toggle **Blank the screen while locked** (persisted to `config.json`
+as `idleBlank`; also settable via a `shell.json` plugin entry).
+
 ### Emergency manual recovery
 
 If you ever end up on a black screen while locked:
