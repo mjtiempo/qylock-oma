@@ -64,6 +64,7 @@ Item {
   property string currentSddm: ""
   property string currentLock: ""
   property string currentBg: ""
+  property bool animatedBg: false
   property bool lockAppInstalled: false
   property bool themedLockActive: false
   property var themeList: []
@@ -153,6 +154,7 @@ Item {
     if (typeof j.currentSddm === "string") root.currentSddm = j.currentSddm
     if (typeof j.currentLock === "string") root.currentLock = j.currentLock
     if (typeof j.currentBg === "string") root.currentBg = j.currentBg
+    if (typeof j.animatedBg === "boolean") root.animatedBg = j.animatedBg
     if (typeof j.lockAppInstalled === "boolean") root.lockAppInstalled = j.lockAppInstalled
     if (typeof j.themedLockActive === "boolean") root.themedLockActive = j.themedLockActive
   }
@@ -309,6 +311,32 @@ Item {
           }
         }
 
+        // Animated-background toggle (Background tab): video themes play as
+        // live wallpaper when on; off keeps the safe static-only behavior.
+        Row {
+          width: parent.width
+          visible: root.tab === "background"
+          spacing: Style.space(8)
+
+          Text {
+            width: parent.width - Style.space(140)
+            text: "Animated backgrounds (video themes)"
+            color: root.muted
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+            elide: Text.ElideRight
+          }
+
+          Button {
+            id: animatedBgBtn
+            width: Style.space(130)
+            text: root.animatedBg ? "On" : "Off"
+            accent: root.accent
+            selected: root.animatedBg
+            onClicked: root.request("setAnimatedBg", root.animatedBg ? "false" : "true")
+          }
+        }
+
         // -------------------------------------------------------------- grid
         // Grid + always-visible scrollbar (thin, right edge)
         Item {
@@ -342,6 +370,30 @@ Item {
               enabled: !root.busy && modelData.main
               cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
               onClicked: root.selectTheme(modelData.name)
+            }
+
+            // Animated marker: video themes show a badge (their tile preview
+            // is still the static PNG until the animated background plays).
+            Rectangle {
+              visible: modelData.video
+              height: Style.space(20)
+              width: videoBadgeText.implicitWidth + Style.space(12)
+              radius: height / 2
+              color: Util.alpha(Color.accent, 0.16)
+              anchors.right: parent.right
+              anchors.top: parent.top
+              anchors.rightMargin: Style.space(6)
+              anchors.topMargin: Style.space(6)
+
+              Text {
+                id: videoBadgeText
+                anchors.centerIn: parent
+                text: "▶ video"
+                color: root.accent
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                font.bold: true
+              }
             }
 
             // Applied marker: small badge (no selection highlight, but the
@@ -513,7 +565,7 @@ Item {
           width: parent.width
           text: (root.tab === "lock"
             ? "Apply sets the lock theme + SDDM (Polkit at next login); Preview locks now with it. "
-            : "Apply changes the background instantly. ")
+            : "Apply changes the background instantly; video themes animate when Animated backgrounds is on. ")
             + "Escape closes."
           color: root.muted
           font.family: Style.font.family

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "mark.live-background",
+  "name": "Live Background",
+  "version": "0.1.0",
+  "author": "Mark",
+  "license": "MIT",
+  "description": "Background renderer with GIF/APNG and video wallpaper support (local takeover of omarchy.background: disable omarchy.background, enable this plugin)",
+  "kinds": [
+    "service"
+  ],
+  "entryPoints": {
+    "service": "Background.qml"
+  }
+}

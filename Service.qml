@@ -65,6 +65,14 @@ Item {
   // Automatically register launcher entries on first load: an Omarchy menu
   // row (extensions/omarchy-menu.jsonc) + a desktop entry. Idempotent.
   property bool autoEntries: true
+  // Animated backgrounds: video themes (background=.mp4/.webm/.mkv/.mov) are
+  // applied to the Omarchy background instead of refused when this is on.
+  // Auto-enabled when the live-background renderer (mark.live-background) is
+  // registered and omarchy.background is disabled; config.json / shell.json
+  // `animatedBg` always wins over the auto state.
+  property bool animatedBg: false
+  property bool animatedBgExplicit: false
+  property bool liveRendererPresent: false
   property var storedConfig: ({})
 
   // ------------------------------------------------------------- live state
@@ -181,6 +189,8 @@ Item {
       currentSddm: root.currentSddm,
       currentLock: root.currentLock,
       currentBg: root.currentBg,
+      animatedBg: root.animatedBg,
+      liveRendererPresent: root.liveRendererPresent,
       lockAppInstalled: root.lockAppInstalled,
       lockMode: root.lockMode,
       themedLockActive: root.themedLockActive,
@@ -559,7 +569,14 @@ Item {
       "; if [ -n \"$cur\" ] && [ \"$cur\" = \"$src\" ]; then git -C \"$dir\" fetch --filter=blob:none --quiet origin 2>/dev/null || true" +
       "; else rm -rf \"$dir\"; git clone --filter=blob:none --sparse \"$src\" \"$dir\" 2>/dev/null || { echo CLONE_FAILED; exit 1; }; fi" +
       "; else rm -rf \"$dir\"; git clone --filter=blob:none --sparse \"$src\" \"$dir\" 2>/dev/null || { echo CLONE_FAILED; exit 1; }; fi" +
-      "; git -C \"$dir\" sparse-checkout set --no-cone quickshell-lockscreen themes/girl-coffee 2>/dev/null" +
+      // Add, never set: a `set` replaces the pattern list and `checkout`
+      // then deletes every other previously fetched theme from disk (the
+      // wallpaper file included). Some git versions reject `--no-cone` on
+      // `add` (2.36+), so fall through mode-neutral `add`, then to `set`
+      // only as a last resort with the essentials re-included.
+      "; git -C \"$dir\" sparse-checkout add --no-cone quickshell-lockscreen themes/girl-coffee 2>/dev/null" +
+      " || git -C \"$dir\" sparse-checkout add quickshell-lockscreen themes/girl-coffee 2>/dev/null" +
+      " || git -C \"$dir\" sparse-checkout set --no-cone quickshell-lockscreen themes/girl-coffee 2>/dev/null || true" +
       "; git -C \"$dir\" checkout --quiet 2>/dev/null || true" +
       "; [ -d \"$dir/quickshell-lockscreen\" ] && echo __BASE_OK__ || echo __BASE_FAIL__"], function(code, out, err) {
       if (String(out || "").indexOf("__BASE_OK__") === -1) {
@@ -580,7 +597,9 @@ Item {
     runCmd(["bash", "-c",
       "dir=" + shq(root.assetsDir) + "; sub=" + shq(sub) +
       "; if [ -f \"$dir/themes/$sub/Main.qml\" ]; then echo HAVE; exit 0; fi" +
-      "; git -C \"$dir\" sparse-checkout add --no-cone themes/\"$sub\" 2>/dev/null || git -C \"$dir\" sparse-checkout set --no-cone themes/\"$sub\" quickshell-lockscreen 2>/dev/null" +
+      "; git -C \"$dir\" sparse-checkout add --no-cone themes/\"$sub\" 2>/dev/null" +
+      " || git -C \"$dir\" sparse-checkout add themes/\"$sub\" 2>/dev/null" +
+      " || git -C \"$dir\" sparse-checkout set --no-cone themes/\"$sub\" quickshell-lockscreen themes/girl-coffee 2>/dev/null || true" +
       "; git -C \"$dir\" checkout --quiet 2>/dev/null || { echo FETCH_FAIL; exit 1; }" +
       "; [ -f \"$dir/themes/$sub/Main.qml\" ] && echo HAVE || echo FETCH_FAIL"], function(code, out) {
       if (String(out || "").indexOf("HAVE") === 0) cb(true, "")
@@ -766,8 +785,8 @@ Item {
       root.fail("Unknown theme: " + name)
       return
     }
-    if (t.video) {
-      root.fail(name + " has no image background to apply (video theme).")
+    if (t.video && !root.animatedBg) {
+      root.fail(t.name + " is a video theme — animated backgrounds are off (enable them in the Background tab).")
       return
     }
     root.setBusy("applying-background", "Applying " + t.name + " background…")
@@ -780,12 +799,27 @@ Item {
         if (code2 !== 0) { root.fail(t.name + " has no image background to apply."); return }
         var bgPath = String(out2 || "").trim()
         runCmd(["bash", "-c", "omarchy theme bg set " + shq(bgPath)], function(code3, out3, err3) {
-          if (code3 === 0) {
-            root.currentBg = t.name
-            root.setDone("idle", "Background applied: " + t.name + " — the Omarchy lock screen and wallpaper now use its artwork.")
-          } else {
+          if (code3 !== 0) {
             root.fail("Background apply failed: " + String(err3 || out3).trim())
+            return
           }
+          // The setter's exit code only proves the command ran — a video file
+          // that fails to RENDER still exits 0. Verify the state link actually
+          // resolves to the artwork and the file still exists.
+          runCmd(["bash", "-c",
+            "l=" + shq(root.homeDir + "/.local/state/omarchy/current/background") +
+            "; r=$(readlink -f \"$l\" 2>/dev/null || true)" +
+            "; if [ -n \"$r\" ] && [ -f \"$r\" ] && [ \"$r\" = " + shq(bgPath) + " ]; then echo CONFIRMED; else echo \"BAD:$r\"; fi"],
+            function(code4, out4) {
+              var verdict = String(out4 || "").trim()
+              var art = t.video ? "animated background" : "background"
+              if (code4 === 0 && verdict === "CONFIRMED") {
+                root.currentBg = t.name
+                root.setDone("idle", t.name + " " + art + " applied — the Omarchy lock screen and wallpaper now use its artwork.")
+              } else {
+                root.fail("Background apply failed: the background link does not resolve to \"" + t.name + "\"'s artwork (" + verdict + ").")
+              }
+            })
         })
       })
     })
@@ -820,6 +854,10 @@ Item {
         if (p.lockAppSubdir) root.lockAppSubdir = String(p.lockAppSubdir)
         if (typeof p.autoSync === "boolean") root.autoSync = p.autoSync
         if (p.lockMode === "themed" || p.lockMode === "native") root.lockMode = String(p.lockMode)
+        if (typeof p.animatedBg === "boolean") {
+          root.animatedBg = p.animatedBg
+          root.animatedBgExplicit = true
+        }
       }
     }
     // user/menu-level overrides (stateDir/config.json) win
@@ -842,11 +880,47 @@ Item {
       var mode = String(cfg.lockMode)
       if (mode === "themed" || mode === "native") root.lockMode = mode
     }
+    if (cfg && typeof cfg.animatedBg === "boolean") {
+      root.animatedBg = cfg.animatedBg
+      root.animatedBgExplicit = true
+    }
+  }
+
+  // The live-background renderer (mark.live-background) takes over the
+  // "background" IPC target when omarchy.background is disabled in shell.json.
+  // Detect that pairing so animated backgrounds flip on automatically; an
+  // explicit animatedBg config always wins.
+  function detectLiveRenderer() {
+    runCmd(["bash", "-c",
+      "f=" + shq(root.homeDir + "/.config/omarchy/shell.json") +
+      "; if [ -f \"$f\" ]" +
+      " && jq -e '(.disabledPlugins // []) | index(\"omarchy.background\") != null' \"$f\" >/dev/null 2>&1" +
+      " && jq -e '([.plugins[]?.id] | index(\"mark.live-background\")) != null' \"$f\" >/dev/null 2>&1" +
+      "; then echo yes; else echo no; fi"], function(code, out) {
+      var present = String(out || "").indexOf("yes") === 0
+      var changed = present !== root.liveRendererPresent
+      root.liveRendererPresent = present
+      if (changed && !root.animatedBgExplicit) {
+        root.animatedBg = present
+        root.writeStatus()
+      }
+    })
+  }
+
+  // Menu toggle: persists animatedBg to config.json and applies immediately.
+  function setAnimatedBg(value) {
+    var on = String(value || "") === "true"
+    root.setBusy("setting-animated-bg", (on ? "Enabling" : "Disabling") + " animated backgrounds…")
+    root.animatedBg = on
+    root.animatedBgExplicit = true
+    root.writeJson(root.configFile, root.mergedConfig({ animatedBg: on }))
+    root.setDone("idle", (on ? "Animated backgrounds enabled" : "Animated backgrounds disabled")
+      + " — video themes will " + (on ? "animate on the wallpaper" : "be treated as static (and are refused when they have no image).") + ".")
   }
 
   function mergedConfig(overrides) {
     var merged = {}
-    var keys = ["repo", "branch", "lockMode", "catalogRepo"]
+    var keys = ["repo", "branch", "lockMode", "catalogRepo", "animatedBg"]
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i]
       if (root.storedConfig && root.storedConfig[k] !== undefined) merged[k] = root.storedConfig[k]
@@ -907,6 +981,7 @@ Item {
     else if (op === "applyBackground") root.applyBackground(name)
     else if (op === "installLockApp") root.installLockApp()
     else if (op === "setLockMode") root.setLockMode(name)
+    else if (op === "setAnimatedBg") root.setAnimatedBg(name)
     else if (op === "testLock") { var r = root.themedLock(); if (r !== "ok") root.fail("Cannot start themed lock: " + r) }
     else if (op === "previewLock") { var r2 = root.previewLock(name); if (r2 !== "ok") root.fail("Cannot preview lock: " + r2) }
     else if (op === "fetchTheme") { var r3 = root.fetchTheme(name); if (r3 !== "started") root.fail("Cannot fetch theme: " + r3) }
@@ -1352,6 +1427,7 @@ Item {
   // ---------------------------------------------------------------- startup
   Component.onCompleted: {
     root.loadConfig()
+    root.detectLiveRenderer()
     runCmd(["bash", "-c", "mkdir -p " + shq(root.stateDir) + " " + shq(root.dataDir) + "; : > " + shq(root.requestFile)], function() {
       root.readCurrentSddm()
       root.readCurrentLock()

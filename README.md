@@ -158,6 +158,45 @@ omarchy-shell mark.lock-themes applyBackground forest      # background only
 omarchy-shell mark.lock-themes fetchTheme nier-automata     # prefetch assets
 ```
 
+## Animated backgrounds
+
+The Background tab can play **live wallpapers**, not just static images:
+
+- **Video themes** (backgrounds ending in `.mp4`/`.webm`/`.mkv`/`.mov` — the
+  cards carry a small ▶ video badge) loop on the Omarchy wallpaper, muted and
+  cropped to fill.
+- **GIF/APNG** files set with `omarchy theme bg set <file>` also animate.
+
+Rendering lives in the **live-background renderer** plugin
+(`mark.live-background`, a local Omarchy plugin that replaces the static
+`omarchy.background` renderer). When it is installed and enabled
+(`omarchy.background` disabled in `shell.json`), animated backgrounds
+**auto-enable**; otherwise video themes are refused with a clear message
+(the safe static-only default is untouched).
+
+The Background tab toggle **Animated backgrounds** forces it either way
+(persisted in `~/.local/state/omarchy/mark.lock-themes/config.json`; a
+`shell.json` plugin entry `"animatedBg": true|false` works too):
+
+| Mode | Video theme applied as |
+| --- | --- |
+| On (renderer installed) | looping muted video wallpaper |
+| On (no renderer) | same as off — the static renderer cannot display it |
+| Off | refused: video theme has no image background |
+
+Notes:
+
+- The service verifies the background state link **and** the artwork file
+  after applying — a video that fails to *render* still exits `0` in the
+  setter, so rendering health is an artifact of the renderer, not this
+  plugin.
+- Battery/heat: a permanently repainting fullscreen surface costs power.
+  The renderer pauses when the session locks and resumes on unlock; hardware
+  decode (VA-API) is used when available, but expect a measurable delta vs. a
+  static background.
+- The lock screen itself always plays the theme's own video (the repo lock
+  app handles it); this feature covers the **desktop wallpaper**.
+
 ## Lock behavior
 
 The picker's themes are rendered by the repository's Quickshell lock app,
