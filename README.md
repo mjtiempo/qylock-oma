@@ -1,8 +1,9 @@
-# QyLock Oma — SDDM and Lock themes
+# QyLock — Themed lock and Live Backgrounds for Omarchy
 
-An [Omarchy](https://omarchy.org/) shell plugin that downloads **lock screen and
-SDDM themes** from the [qylock](https://github.com/Darkkal44/qylock) repository,
-shows them in a square theme grid, and applies your pick:
+An [Omarchy](https://omarchy.org/) shell plugin that gives you a **themed
+lock screen** and **live backgrounds** from a single picker: it downloads
+**lock screen and SDDM themes** from the [qylock](https://github.com/Darkkal44/qylock)
+repository, shows them in a square theme grid, and applies your pick:
 
 - **Apply (Lock & SDDM tab)** — one action sets the theme for both the
   Quickshell lock screen (`~/.config/qylock/theme` + the repo's lock app at
@@ -112,7 +113,7 @@ omarchy restart shell
 On first load the plugin registers itself, so installing users need to do
 nothing manual:
 
-- **Omarchy menu row** — a `QyLock Oma` entry under the **Style** section
+- **Omarchy menu row** — a `QyLock` entry under the **Style** section
   (searchable: `qylock`, `lock`, `sddm`, `theme`) is added to
   `~/.config/omarchy/extensions/omarchy-menu.jsonc` (only if the key is
   missing; existing entries are untouched; a legacy root-level entry from
@@ -126,7 +127,7 @@ with `"autoEntries": false` in the plugin's `shell.json` entry.
 
 ## Usage
 
-Open the picker (`omarchy menu` → search **qylock**, or launch **QyLock Oma**
+Open the picker (`omarchy menu` → search **qylock**, or launch **QyLock**
 from the app launcher; bind it, e.g. `SUPER+SHIFT+L`):
 
 ```sh
@@ -146,6 +147,7 @@ The picker is a square theme grid with two tabs:
 
 The **search box** above the grid filters by name as you type (both tabs;
 `Escape` or ✕ clears it).
+
 - **Background** — click a card, then **Apply** to use its artwork as the
   Omarchy background (lock screen + wallpaper).
 

@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "id": "mark.lock-themes",
-  "name": "QyLock Oma - SDDM and Lock themes",
-    "version": "1.34.0",
+  "name": "QyLock - Themed lock and Live Backgrounds for Omarchy",
+    "version": "1.35.0",
   "author": "Mark",
   "license": "MIT",
-  "description": "Downloads lock screen and SDDM themes from a compatible git repository (qylock-style: themes/<name>/ dirs + optional quickshell-lockscreen/ app), lists them in a menu, and applies your pick: SDDM login theme, the repo lock screen theme, and the Omarchy lock background.",
+  "description": "Themed lock and live backgrounds for Omarchy: downloads lock screen and SDDM themes from a compatible git repository (qylock-style), lists them in a menu together with Omarchy's own wallpapers and your drop-in folder, and applies your pick: themed lock + SDDM login theme, and image/video/GIF backgrounds (animated when the live-background renderer is active).",
   "kinds": [
     "service",
     "menu"

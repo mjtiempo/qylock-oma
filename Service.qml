@@ -1404,7 +1404,7 @@ Item {
     var glyph = "\ue8db"
 
     // Desktop entry (rewrite every start; cheap and idempotent)
-    var desktop = "[Desktop Entry]\nName=QyLock Oma\nComment=SDDM and lock theme picker\nExec=" + exec +
+    var desktop = "[Desktop Entry]\nName=QyLock\nComment=Themed lock and live backgrounds picker\nExec=" + exec +
       "\nIcon=" + previewIcon + "\nTerminal=false\nType=Application\nCategories=Settings;System;\n"
     runCmd(["bash", "-c",
       "mkdir -p " + shq(root.homeDir + "/.local/share/applications") +
@@ -1419,7 +1419,7 @@ Item {
       var raw = String(text || "")
       if (raw.indexOf('"style.qylock"') !== -1) return
       var body = raw.replace(/\s*"qylock":\s*\{[^}]*\},\s*/g, "").trim()
-      var line = "  \"style.qylock\": {\"icon\":\"" + glyph + "\",\"label\":\"QyLock Oma\",\"description\":\"SDDM and lock theme picker\",\"action\":\"" + exec + "\"},\n"
+      var line = "  \"style.qylock\": {\"icon\":\"" + glyph + "\",\"label\":\"QyLock\",\"description\":\"Themed lock and live backgrounds picker\",\"action\":\"" + exec + "\"},\n"
       var updated = body.replace(/\n\s*\}\s*$/, "\n" + line + "}\n")
       if (updated === body) updated = "{\n" + line + "}\n"
       runCmd(["bash", "-c", "mkdir -p " + shq(root.homeDir + "/.config/omarchy/extensions") +

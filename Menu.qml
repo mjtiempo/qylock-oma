@@ -297,7 +297,7 @@ Item {
             width: parent.width - Style.space(58)
             height: Style.space(44)
             verticalAlignment: Text.AlignVCenter
-            text: "QyLock Oma - SDDM and Lock themes"
+            text: "QyLock - Themed lock and Live Backgrounds"
             color: root.foreground
             font.family: Style.font.family
             font.pixelSize: Style.font.title + 4
