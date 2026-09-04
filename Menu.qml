@@ -550,15 +550,31 @@ Item {
                 }
               }
 
-              Text {
-                width: parent.width
-                text: modelData.name + (modelData.risky ? " ⚠" : "")
-                color: root.foreground
-                font.family: Style.font.family
-                font.pixelSize: Style.font.subtitle
-                font.bold: true
-                elide: Text.ElideRight
-                horizontalAlignment: Text.AlignHCenter
+              // Name (with ▶ icon for video backgrounds, ⚠ for known-broken
+              // themes), centered with the icon in one row so long names
+              // still elide inside the tile.
+              Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Style.space(4)
+
+                Text {
+                  visible: modelData.video
+                  text: "▶"
+                  color: root.accent
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.subtitle
+                  font.bold: true
+                }
+
+                Text {
+                  width: Math.min(root.tileWidth - Style.space(48), implicitWidth)
+                  text: modelData.name + (modelData.risky ? " ⚠" : "")
+                  color: root.foreground
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.subtitle
+                  font.bold: true
+                  elide: Text.ElideRight
+                }
               }
 
               // Current-theme marker: the applied card shows a plain "active"
