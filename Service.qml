@@ -1414,12 +1414,23 @@ Item {
 
     // Omarchy menu row: nested under the built-in "Style" section
     // (style.qylock). Removes a legacy root-level "qylock" entry if one was
-    // left by earlier versions.
+    // left by earlier versions. An existing style.qylock row that still
+    // carries OUR old auto-generated label is migrated to the current name;
+    // a user-customized row is left untouched.
     root.readTextFile(menuFile, function(text) {
       var raw = String(text || "")
-      if (raw.indexOf('"style.qylock"') !== -1) return
-      var body = raw.replace(/\s*"qylock":\s*\{[^}]*\},\s*/g, "").trim()
       var line = "  \"style.qylock\": {\"icon\":\"" + glyph + "\",\"label\":\"QyLock\",\"description\":\"Themed lock and live backgrounds picker\",\"action\":\"" + exec + "\"},\n"
+      if (raw.indexOf('"style.qylock"') !== -1) {
+        if (raw.indexOf('"QyLock Oma"') !== -1) {
+          var migrated = raw.replace(/"style\.qylock":\s*\{[^}]*\}/,
+            '"style.qylock": {"icon":"' + glyph + '","label":"QyLock","description":"Themed lock and live backgrounds picker","action":"' + exec + '"}')
+          if (migrated !== raw) {
+            runCmd(["bash", "-c", "printf '%s' " + shq(migrated) + " > " + shq(menuFile)], null)
+          }
+        }
+        return
+      }
+      var body = raw.replace(/\s*"qylock":\s*\{[^}]*\},\s*/g, "").trim()
       var updated = body.replace(/\n\s*\}\s*$/, "\n" + line + "}\n")
       if (updated === body) updated = "{\n" + line + "}\n"
       runCmd(["bash", "-c", "mkdir -p " + shq(root.homeDir + "/.config/omarchy/extensions") +
