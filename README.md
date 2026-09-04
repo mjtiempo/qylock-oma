@@ -1,69 +1,6 @@
 # QyLock — Themed lock and Live Backgrounds for Omarchy
 
-An [Omarchy](https://omarchy.org/) shell plugin that gives you a **themed
-lock screen** and **live backgrounds** from a single picker: it downloads
-**lock screen and SDDM themes** from the [qylock](https://github.com/Darkkal44/qylock)
-repository, shows them in a square theme grid, and applies your pick:
-
-- **Apply (Lock & SDDM tab)** — one action sets the theme for both the
-  Quickshell lock screen (`~/.config/qylock/theme` + the repo's lock app at
-  `~/.local/share/omarchy/mark.lock-themes/lockscreen/`) *and* the SDDM login
-  screen (installs to `/usr/share/sddm/themes/<name>`, sets
-  `Current=<name>` in `/etc/sddm.conf.d/theme.conf` — one Polkit prompt,
-  takes effect at the next login screen).
-- **Apply (Background tab)** — sets the theme's artwork as the Omarchy
-  background (lock screen + wallpaper).
-- **Preview** — locks right now with a card's theme without changing your
-  selection.
-
-Works out of the box with [qylock](https://github.com/Darkkal44/qylock)
-(40 themes incl. the clockwork family) and any other repository that follows
-the same layout:
-
-```text
-<repo>/
-├── themes/
-│   ├── <theme-name>/      # SDDM theme: Main.qml, theme.conf, metadata.desktop, bg.png…
-│   └── …
-└── quickshell-lockscreen/ # optional: the repo's Quickshell lock app (lock.sh, lock_shell.qml, shim/, imports/)
-```
-
-## Theme source
-
-All themes and the Quickshell lock app come from:
-
-- **Repository:** [Darkkal44/qylock](https://github.com/Darkkal44/qylock)
-  by **Darkkal44** — "a bunch of lockscreen themes for SDDM and Quickshell"
-- `themes/<name>/` — the SDDM/lock theme set (Main.qml + theme.conf +
-  metadata.desktop + background art + bundled fonts where license permits)
-- `quickshell-lockscreen/` — the repo's Quickshell lock app
-  (lock.sh, lock_shell.qml, shim/, imports/), installed at
-  `~/.local/share/omarchy/mark.lock-themes/lockscreen/`
-- `Assets/*.gif` — qylock's README-gallery animations (not used by the
-  catalog flow; the grid's previews are the catalog repo's static PNGs —
-  see Architecture below)
-
-The fonts, artwork, and theme designs are the property of their respective
-creators; several themes need a font that cannot be bundled (see qylock's
-README "Font Requirements" table — e.g. Genshin, NieR, Terraria, Minecraft).
-This plugin downloads the repository at runtime; it does not redistribute the
-themes.
-
-### Orbital lock themes
-
-The `clockwork-orbital` and `clockwork-neo-orbital` themes (bundled in
-qylock's `themes/clockwork/` collection) follow the **orbital** lock style
-from [dumidulkdev/omarchy-orbital-lock](https://github.com/dumidulkdev/omarchy-orbital-lock)
-— the Omarchy orbital lock-screen extension plugin by **Dumidul**.
-
-### Third-party license
-
-The downloaded repository (themes + lock app) is released under
-**GPLv3** by Darkkal44. The plugin code in this repository is **MIT** — it
-does not bundle any qylock content; it fetches and uses it as a data source
-on the user's machine. If you redistribute this plugin together with
-downloaded theme content, the combined distribution is governed by the
-themes' GPLv3 terms.
+An [Omarchy](https://omarchy.org/) shell plugin that gives you an interface for using custom Lock and SDDM Themes, Setting Backgrounds and experimental video backgrounds. 
 
 ## Install (from git)
 
@@ -373,7 +310,21 @@ The plugin keeps the initial footprint small by splitting the data:
 - `Menu.qml` (menu kind) is a layer-shell surface that watches those files
   and sends requests through `request.json`.
 
-## License
+## Attribution
 
-MIT — see LICENSE (plugin code). Downloaded themes and the lock app are
-GPLv3, © Darkkal44 — see "Theme source" above.
+Themes and the Quickshell lock app come from
+[Darkkal44/qylock](https://github.com/Darkkal44/qylock) — the SDDM/lock theme
+sets (`themes/<name>/`) and its lock app (`quickshell-lockscreen/`) — and are
+downloaded at runtime, not redistributed by this plugin. The clockwork
+family's orbital style follows
+[dumidulkdev/omarchy-orbital-lock](https://github.com/dumidulkdev/omarchy-orbital-lock)
+by **Dumidul**.
+
+Fonts, artwork and theme designs are the property of their respective
+creators; several themes need a font that cannot be bundled (see qylock's
+README "Font Requirements" table — e.g. Genshin, NieR, Terraria, Minecraft).
+
+**License** — plugin code is **MIT** (see LICENSE). Downloaded themes and
+lock app are **GPLv3**, © Darkkal44. Redistributing this plugin together
+with downloaded theme content makes the combined distribution subject to
+the themes' GPLv3 terms.
