@@ -76,7 +76,8 @@ The picker is a square theme grid with two tabs:
 - **Lock & SDDM** — click a theme card to select it; **Preview** and **Apply**
   buttons appear on the card. **Preview** locks now with that theme (without
   changing your selection); **Apply** sets both the lock theme and the SDDM
-  login theme (one Polkit prompt for the SDDM part).
+  login theme (a "Password required to Apply SDDM theme" prompt for the
+  SDDM part — afterwards SDDM applies are remembered).
 - **⚙ Lock provider** (top-right of the picker) — switches between the repo
   themed lock and the native Omarchy lock. The choice persists; your themes
   stay installed either way. A crash that breaks the themed lock switches

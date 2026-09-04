@@ -668,24 +668,33 @@ Item {
       cb(false, "\"" + name + "\" is a theme collection folder (sub-themes inside, no Main.qml) — not usable as an SDDM theme.")
       return
     }
-    var script = [
-      "set -e",
-      "name=" + shq(name),
-      "src=" + shq(t.path),
-      "th=/usr/share/sddm/themes/$name",
-      "mkdir -p /usr/share/sddm/themes",
-      "rm -rf \"$th\"",
-      "cp -a \"$src\" \"$th\"",
-      "if [ -f /etc/sddm.conf.d/theme.conf ]; then cp -a /etc/sddm.conf.d/theme.conf \"/etc/sddm.conf.d/theme.conf.bak.$(date +%s)\" ; fi",
-      "printf '[Theme]\\nCurrent=%s\\n' \"$name\" > /etc/sddm.conf.d/theme.conf"
-    ].join("\n")
-    runCmd(["pkexec", "sh", "-c", script], function(code, out, err) {
-      if (code === 0) {
-        root.currentSddm = name
-        cb(true, "")
-      } else {
-        cb(false, "SDDM install failed (exit " + code + "): " + String(err || out).trim())
+    // Privileged SDDM install through a dedicated polkit action
+    // (org.qylock.sddm-theme): pkexec runs our helper FILE, so the auth
+    // dialog shows the action's clean label ("Password required to Apply
+    // SDDM theme") instead of the whole install script. First use
+    // bootstraps the helper + policy into /usr/share (one raw prompt);
+    // auth_admin_keep then remembers the authorization.
+    var helper = "/usr/share/qylock-oma/install-sddm.sh"
+    var policyPath = "/usr/share/polkit-1/actions/qylock-oma.policy"
+    runCmd(["bash", "-c",
+      "[ -x " + shq(helper) + " ] && [ -f " + shq(policyPath) + " ] && echo READY || echo SETUP"], function(code0, out0) {
+      var finish = function(code, out, err) {
+        if (code === 0) {
+          root.currentSddm = name
+          cb(true, "")
+        } else {
+          cb(false, "SDDM install failed (exit " + code + "): " + String(err || out).trim())
+        }
       }
+      if (String(out0 || "").indexOf("READY") === 0) {
+        runCmd(["pkexec", helper, name, t.path], finish)
+        return
+      }
+      runCmd(["pkexec", "sh", "-c",
+        "mkdir -p /usr/share/qylock-oma && cp " + shq(root.pluginDir + "/tools/install-sddm.sh") + " " + shq(helper) +
+        " && cp " + shq(root.pluginDir + "/tools/qylock-oma.policy") + " " + shq(policyPath) +
+        " && chmod 755 " + shq(helper) +
+        " && exec " + shq(helper) + " " + shq(name) + " " + shq(t.path)], finish)
     })
   }
 
