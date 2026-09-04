@@ -2,6 +2,9 @@
 //
 // Manages a compatible lock/SDDM theme repository (qylock-style):
 //   * syncs the repo with git (clone / pull / re-clone on URL change)
+//   * verifies the signed catalog manifest (ssh-keygen ed25519 signature)
+//     and pins the asset clone to the reviewed upstream commit + tree SHAs
+//     (see README "Security & trust model")
 //   * scans themes/<name>/ dirs into a theme model
 //   * installs the repo's Quickshell lock app (quickshell-lockscreen/) and
 //     writes the lock theme preference so the lock uses the chosen theme
@@ -54,6 +57,18 @@ Item {
   // theme assets (videos etc.) are fetched lazily per theme on Apply/Preview.
   property string catalogRepo: "https://github.com/mjtiempo/qylock-oma-catalog.git"
   property string repoBranch: ""
+  // ------------------------------------------------------------- trust model
+  // Catalog trust: index.json + index.json.sig are verified against an
+  // ed25519 public key (allowed_signers format) shipped with the plugin.
+  // The signed manifest records the reviewed upstream commit (catalogCommit)
+  // and the lock-app tree SHA (lockTree); theme entries carry their own
+  // tree SHA. Assets are only materialized from that pinned commit.
+  property string catalogSignersFile: pluginDir + "/tools/qylock-oma-signers"
+  property string catalogSignerId: "qylock-catalog@mjtiempo"
+  property string catalogSignerNamespace: "file"
+  property string catalogCommit: ""
+  property string lockTree: ""
+  property int rejectedEntries: 0
   property string lockThemeFile: homeDir + "/.config/qylock/theme"
   property string lockAppSubdir: "quickshell-lockscreen"
   // Built-in background sources scanned into the picker's Background tab
@@ -279,37 +294,78 @@ Item {
     return null
   }
 
-  // Builds the theme model from the catalog's index.json. The catalog carries
-  // names, flags and small previews; each entry's subpath points into the
-  // lazy asset clone (assetsDir/themes/<subpath>).
+  // ------------------------------------------------------------------ trust
+  // Single-component path policy for anything that can reach the filesystem
+  // (theme names, catalog subpaths, preview paths). Kept in sync with
+  // tools/verify-catalog.sh and the polkit helper (install-sddm.sh):
+  //   * first char alphanumeric (no leading dot/dash)
+  //   * only [A-Za-z0-9._-] anywhere (no separators, no control chars,
+  //     no newline -> no config injection)
+  //   * no ".." substring (no traversal)
+  function isValidNameComponent(c) {
+    if (!c || c.length === 0) return false
+    if (c.indexOf("..") !== -1) return false
+    if (!/^[A-Za-z0-9]/.test(c)) return false
+    return String(c).replace(/[A-Za-z0-9._-]/g, "").length === 0
+  }
+  function isValidSubpath(s) {
+    if (!s || s.length === 0) return false
+    var parts = s.split("/")
+    for (var i = 0; i < parts.length; i++) {
+      if (!root.isValidNameComponent(parts[i])) return false
+    }
+    return true
+  }
+
+  // Builds the theme model from the catalog's index.json — a SIGNED manifest
+  // (verified by verifyCatalog() before this runs) in the form
+  // { commit, lockTree, themes: [{ name, subpath, tree, flags, preview }] }.
+  // commit pins the reviewed upstream commit; each entry's tree is the git
+  // tree SHA of themes/<subpath> at that commit. Entries that fail the path
+  // policy are skipped (fail closed — a hostile catalog cannot reach
+  // filesystem operations with an unsafe name).
   function parseCatalog(cb) {
     root.readTextFile(root.catalogIndexFile, function(raw) {
-      var list = []
-      var entries = null
-      try { entries = JSON.parse(raw || "[]") } catch (e) { entries = null }
-      if (!Array.isArray(entries)) {
-        root.fail("Catalog index.json is invalid.")
+      var manifest = null
+      try { manifest = JSON.parse(raw || "null") } catch (e) { manifest = null }
+      if (!manifest || typeof manifest !== "object" || !Array.isArray(manifest.themes)) {
+        root.fail("Catalog is not a signed theme manifest — refusing to load. (Update the catalog or the plugin.)")
         return
       }
+      root.catalogCommit = String(manifest.commit || "")
+      root.lockTree = String(manifest.lockTree || "")
+      var list = []
+      root.rejectedEntries = 0
+      var entries = manifest.themes
       for (var i = 0; i < entries.length; i++) {
         var e = entries[i]
+        if (!e || typeof e !== "object") { root.rejectedEntries++; continue }
         var name = String(e.name || "")
-        if (!name) continue
         var sub = String(e.subpath || name)
+        var tree = String(e.tree || "")
+        if (!root.isValidNameComponent(name) || !root.isValidSubpath(sub) ||
+            !/^[0-9a-f]{40}([0-9a-f]{24})?$/.test(tree)) {
+          root.rejectedEntries++
+          continue
+        }
         var pv = String(e.preview || "")
+        if (pv.length > 0 && !root.isValidSubpath(pv)) pv = ""
+        var color = String(e.color || "").replace(/[\r\n\t]/g, "").slice(0, 64)
+        var flatFrom = String(e.flattenedFrom || "").replace(/[\r\n\t]/g, "").slice(0, 64)
         list.push({
           name: name,
           subpath: sub,
+          tree: tree,
           main: e.main !== false,
           conf: e.conf !== false,
           meta: true,
           background: "",
-          kind: e.video ? "video" : (String(e.color || "").length ? "color" : "image"),
-          color: String(e.color || ""),
+          kind: e.video ? "video" : (color.length ? "color" : "image"),
+          color: color,
           video: e.video === true,
           collection: false,
           collectionOf: "",
-          flattenedFrom: String(e.flattenedFrom || ""),
+          flattenedFrom: flatFrom,
           risky: e.risky === true,
           path: root.assetsDir + "/themes/" + sub,
           gif: "",
@@ -431,6 +487,29 @@ Item {
     })
   }
 
+  // Signature + policy verification of the catalog manifest (index.json +
+  // index.json.sig) against the plugin's pinned signer key. Rejects unsigned,
+  // tampered, or policy-violating manifests (fail closed).
+  function verifyCatalog(cb) {
+    var script = root.pluginDir + "/tools/verify-catalog.sh"
+    runCmd([script, root.catalogIndexFile, root.catalogSignersFile, root.catalogSignerId, root.catalogSignerNamespace], function(code, out, err) {
+      if (code === 0) { cb(true, ""); return }
+      cb(false, "Catalog verification failed: " + String(out || err).trim())
+    })
+  }
+
+  // Commit + tree verification: the assets clone must be checked out at the
+  // manifest's recorded commit, and the lock app + every theme subtree must
+  // match their recorded tree SHAs. Exits 0 with NO_ASSETS_SKIPPED when the
+  // clone does not exist yet (offline install with auto-sync off).
+  function verifyCatalogTrees(cb) {
+    var script = root.pluginDir + "/tools/verify-catalog.sh"
+    runCmd([script, "--trees", root.catalogIndexFile, root.assetsDir, root.lockAppSubdir], function(code, out, err) {
+      if (code === 0) { cb(true, ""); return }
+      cb(false, "Catalog integrity check failed: " + String(out || err).trim())
+    })
+  }
+
   function doCloneOrPull() {
     // Sync the lightweight catalog (list + previews); the heavy theme assets
     // live in a blobless sparse clone and are fetched per theme on demand.
@@ -457,20 +536,29 @@ Item {
         root.fail("Catalog repository is not valid: no index.json found.")
         return
       }
-      root.repoCloned = true
-      root.parseCatalog(function() {
-        root.prepareAssetsBase(function(ok, note) {
-          if (!ok) { root.fail(note); return }
-          // Include Omarchy's shipped wallpapers + custom dir in the picker.
-          root.scanBuiltinBackgrounds()
-          if (!root.lockAppInstalled) {
-            root.installLockAppInner(function(ok2, note2) {
-              if (ok2) root.setDone("idle", "Synced " + root.themeCount + " themes (catalog). " + note2)
-              else root.fail(note2)
+      root.verifyCatalog(function(ok, note) {
+        if (!ok) { root.fail(note); return }
+        root.parseCatalog(function() {
+          root.prepareAssetsBase(function(ok2, note2) {
+            if (!ok2) { root.fail(note2); return }
+            root.verifyCatalogTrees(function(ok3, note3) {
+              if (!ok3) { root.fail(note3); return }
+              root.repoCloned = true
+              // Include Omarchy's shipped wallpapers + custom dir in the picker.
+              root.scanBuiltinBackgrounds()
+              var summary = "Synced " + root.themeCount + " themes (catalog @ " +
+                root.catalogCommit.substring(0, 7) + ")"
+              if (root.rejectedEntries > 0) summary += " — " + root.rejectedEntries + " rejected entries"
+              if (!root.lockAppInstalled) {
+                root.installLockAppInner(function(ok4, note4) {
+                  if (ok4) root.setDone("idle", summary + ". " + note4)
+                  else root.fail(note4)
+                })
+              } else {
+                root.setDone("idle", summary + ". Theme assets are fetched on Apply / Preview.")
+              }
             })
-          } else {
-            root.setDone("idle", "Synced " + root.themeCount + " themes (catalog). Theme assets are fetched on Apply / Preview.")
-          }
+          })
         })
       })
     })
@@ -481,23 +569,27 @@ Item {
   // theme by ensureThemeAssets().
   function prepareAssetsBase(cb) {
     var src = root.repoUrl
+    var sha = root.catalogCommit
     runCmd(["bash", "-c",
-      "set -u; src=" + shq(src) + "; dir=" + shq(root.assetsDir) +
+      "set -u; src=" + shq(src) + "; dir=" + shq(root.assetsDir) + "; sha=" + shq(sha) +
+      "; lock=" + shq(root.lockAppSubdir) +
       "; mkdir -p " + shq(root.dataDir) +
       "; if [ -d \"$dir/.git\" ]; then cur=$(git -C \"$dir\" remote get-url origin 2>/dev/null || true)" +
-      "; if [ -n \"$cur\" ] && [ \"$cur\" = \"$src\" ]; then git -C \"$dir\" fetch --filter=blob:none --quiet origin 2>/dev/null || true" +
-      "; else rm -rf \"$dir\"; git clone --filter=blob:none --sparse \"$src\" \"$dir\" 2>/dev/null || { echo CLONE_FAILED; exit 1; }; fi" +
-      "; else rm -rf \"$dir\"; git clone --filter=blob:none --sparse \"$src\" \"$dir\" 2>/dev/null || { echo CLONE_FAILED; exit 1; }; fi" +
-      // Add, never set: a `set` replaces the pattern list and `checkout`
-      // then deletes every other previously fetched theme from disk (the
-      // wallpaper file included). Some git versions reject `--no-cone` on
-      // `add` (2.36+), so fall through mode-neutral `add`, then to `set`
-      // only as a last resort with the essentials re-included.
-      "; git -C \"$dir\" sparse-checkout add --no-cone quickshell-lockscreen themes/girl-coffee 2>/dev/null" +
-      " || git -C \"$dir\" sparse-checkout add quickshell-lockscreen themes/girl-coffee 2>/dev/null" +
-      " || git -C \"$dir\" sparse-checkout set --no-cone quickshell-lockscreen themes/girl-coffee 2>/dev/null || true" +
-      "; git -C \"$dir\" checkout --quiet 2>/dev/null || true" +
-      "; [ -d \"$dir/quickshell-lockscreen\" ] && echo __BASE_OK__ || echo __BASE_FAIL__"], function(code, out, err) {
+      "; [ -n \"$cur\" ] && [ \"$cur\" = \"$src\" ] || { rm -rf \"$dir\"; git clone --filter=blob:none --sparse --no-checkout \"$src\" \"$dir\" 2>/dev/null || { echo CLONE_FAILED; exit 1; }; }" +
+      "; else git clone --filter=blob:none --sparse --no-checkout \"$src\" \"$dir\" 2>/dev/null || { echo CLONE_FAILED; exit 1; }; fi" +
+      // Non-cone sparse patterns; `set` pins the base pattern list (lock app
+      // + safe fallback). git 2.55 dropped `--no-cone` from `add`, so `set`
+      // is the deterministic primitive across supported git versions.
+      "; git -C \"$dir\" sparse-checkout set --no-cone \"$lock\" themes/girl-coffee 2>/dev/null || true" +
+      // Fetch + check out exactly the reviewed commit — never the mutable
+      // remote head. Arbitrary-SHA fetch first; the full fetch covers servers
+      // that refuse it. If the commit was force-pushed away upstream, the
+      // checkout fails -> fail closed.
+      "; git -C \"$dir\" fetch --filter=blob:none origin \"$sha\" 2>/dev/null" +
+      " || git -C \"$dir\" fetch --filter=blob:none origin 2>/dev/null || { echo FETCH_FAIL; exit 1; }" +
+      "; git -C \"$dir\" checkout --quiet \"$sha\" 2>/dev/null || { echo CHECKOUT_FAIL; exit 1; }" +
+      "; [ \"$(git -C \"$dir\" rev-parse HEAD)\" = \"$sha\" ] || { echo COMMIT_MISMATCH; exit 1; }" +
+      "; [ -d \"$dir/$lock\" ] && echo __BASE_OK__ || echo __BASE_FAIL__"], function(code, out, err) {
       if (String(out || "").indexOf("__BASE_OK__") === -1) {
         cb(false, "Could not prepare the asset cache (" + String(err || out).trim() + ")")
         return
@@ -520,20 +612,30 @@ Item {
   function ensureThemeAssetsInner(t, attempt, cb) {
     var sub = String(t.subpath)
     var flat = String(t.name).replace(/[^\w.-]/g, "_")
+    var tree = String(t.tree || "")
     runCmd(["bash", "-c",
-      "dir=" + shq(root.assetsDir) + "; sub=" + shq(sub) + "; flat=" + shq(flat) +
+      "dir=" + shq(root.assetsDir) + "; sub=" + shq(sub) + "; flat=" + shq(flat) + "; tree=" + shq(tree) +
+      "; lock=" + shq(root.lockAppSubdir) +
       // Nested sub-themes (clockwork/ -> clockwork-orbital) are addressed by
       // their flat name, and the flat link is otherwise only made at install
       // time. A theme fetched later would leave lock.sh pointing at a missing
       // path -> black lock surface; refresh the link on every successful fetch.
+      // treecheck: the materialized subtree must still belong to the pinned,
+      // manifest-verified commit (git verifies blob hashes on checkout, so a
+      // rev-parse match closes the remote-content boundary here).
       "; mkln() { [ \"$sub\" = \"$flat\" ] || ln -sfn \"$dir/themes/$sub\" \"$dir/themes/$flat\" 2>/dev/null || true; }" +
-      "; if [ -f \"$dir/themes/$sub/Main.qml\" ]; then mkln; echo HAVE; exit 0; fi" +
+      "; treecheck() { [ \"$(git -C \"$dir\" rev-parse HEAD:themes/$sub 2>/dev/null)\" = \"$tree\" ]; }" +
+      "; if [ -f \"$dir/themes/$sub/Main.qml\" ]; then treecheck || { echo TREE_MISMATCH; exit 1; }; mkln; echo HAVE; exit 0; fi" +
       "; git -C \"$dir\" sparse-checkout add --no-cone themes/\"$sub\" 2>/dev/null" +
       " || git -C \"$dir\" sparse-checkout add themes/\"$sub\" 2>/dev/null" +
-      " || git -C \"$dir\" sparse-checkout set --no-cone themes/\"$sub\" quickshell-lockscreen themes/girl-coffee 2>/dev/null || true" +
+      " || git -C \"$dir\" sparse-checkout set --no-cone themes/\"$sub\" \"$lock\" themes/girl-coffee 2>/dev/null || true" +
       "; git -C \"$dir\" checkout --quiet 2>/dev/null || { echo FETCH_FAIL; exit 1; }" +
-      "; if [ -f \"$dir/themes/$sub/Main.qml\" ]; then mkln; echo HAVE; else echo FETCH_FAIL; fi"], function(code, out) {
+      "; if [ -f \"$dir/themes/$sub/Main.qml\" ] && treecheck; then mkln; echo HAVE; else echo FETCH_FAIL; fi"], function(code, out) {
       if (String(out || "").indexOf("HAVE") === 0) { cb(true, ""); return }
+      if (String(out || "").indexOf("TREE_MISMATCH") === 0) {
+        cb(false, "Integrity check failed for \"" + t.name + "\" — catalog and repository disagree.")
+        return
+      }
       if (attempt < 2) {
         runCmd(["bash", "-c", "sleep 3"], function() {
           root.ensureThemeAssetsInner(t, attempt + 1, cb)
@@ -1599,9 +1701,18 @@ Item {
         root.phase = "idle"
         root.message = "Auto-sync is disabled — press Update in the theme menu to download themes."
         root.writeStatus()
-        // No sync this boot: still refresh the list from the local catalog
-        // and merge the built-in wallpapers.
-        root.parseCatalog(function() { root.scanBuiltinBackgrounds() })
+        // No sync this boot: still verify + load the local catalog (the
+        // signature must validate even without network) and merge the
+        // built-in wallpapers.
+        root.verifyCatalog(function(ok, note) {
+          if (!ok) { root.fail(note); return }
+          root.parseCatalog(function() {
+            root.verifyCatalogTrees(function(ok2, note2) {
+              if (!ok2) { root.fail(note2); return }
+              root.scanBuiltinBackgrounds()
+            })
+          })
+        })
       }
     })
   }

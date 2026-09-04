@@ -237,6 +237,62 @@ State and downloaded themes live under:
 - `~/.local/state/omarchy/mark.lock-themes/` — status.json, themes.json, state
 - `/etc/sddm.conf.d/theme.conf.bak.*` — backups taken before SDDM switches
 
+## Security & trust model
+
+The themed lock, SDDM integration, and background behavior are user-level or
+prompt-gated; the plugin never runs as root except through the dedicated
+polkit action below.
+
+### Catalog integrity (signed manifest)
+
+`index.json` is a **signed manifest**: the catalog repo ships
+`index.json.sig`, an ssh-keygen ed25519 signature produced by the plugin
+author's catalog-signing key. The plugin verifies the signature against the
+public key pinned in `tools/qylock-oma-signers` **before** loading anything
+from the catalog, and refuses to load unsigned or tampered manifests (fail
+closed).
+
+The manifest also **pins the reviewed upstream commit**: it records the
+exact `Darkkal44/qylock` commit the author reviewed, the lock app's git tree
+SHA, and a per-theme git tree SHA. The asset clone is checked out at that
+commit only (never the mutable remote head), and every theme is re-verified
+against its recorded tree before it can be applied, previewed, or installed
+as an SDDM theme. An upstream or catalog compromise therefore cannot
+introduce unreviewed code without the author's signing key.
+
+### Path safety
+
+Theme names and catalog subpaths are validated against a strict
+single-component policy (`[A-Za-z0-9][A-Za-z0-9._-]*`, no `..`, no
+separators, no control characters) in three independent layers: catalog
+parsing, `tools/verify-catalog.sh`, and the privileged helper. The helper
+additionally canonicalizes paths and refuses symlinked components and any
+source outside the invoking user's plugin data dir, so remote catalog
+strings can never drive root filesystem operations outside the intended
+theme directory.
+
+### Privileged SDDM install
+
+Applying an SDDM theme runs `pkexec` through a dedicated polkit action
+(`org.qylock.sddm-theme`, `auth_admin_keep` — one prompt per ~5-minute
+window). The helper (`tools/install-sddm.sh`) re-validates the theme name,
+confines source and destination paths, backs up the existing
+`/etc/sddm.conf.d/theme.conf`, and only then writes the new configuration.
+
+### Publishing a catalog release (author side)
+
+See [docs/catalog-signing.md](docs/catalog-signing.md). In short: review the
+upstream commit, run `tools/build-catalog.sh` with the catalog-signing key,
+and push the new `index.json` + `index.json.sig`.
+
+### Custom catalogs
+
+`repo`/`catalogRepo` in the plugin config change the remote URLs, but content
+is still gated on the pinned signing key: a custom catalog only loads if it
+is signed by the key in `tools/qylock-oma-signers`. To trust a different
+catalog, replace that file (it is reviewed plugin content) with the signer's
+public key — doing so is at your own risk.
+
 ## Architecture (catalog + lazy assets)
 
 The plugin keeps the initial footprint small by splitting the data:
